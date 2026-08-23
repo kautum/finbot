@@ -5,6 +5,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
+from langchain_tavily import TavilySearch
 
 load_dotenv()
 
@@ -13,17 +14,24 @@ llm = ChatGroq(
     api_key=os.getenv("GROQ_API_KEY"),
 )
 
+
 @tool
 def ping_tool(message: str) -> str:
     """A placeholder test tool. Echoes back a message to confirm tool-calling works."""
     return f"Tool received: {message}"
 
-tools = [ping_tool]
+
+web_search_tool = TavilySearch(max_results=3)
+
+# All tools must be defined and gathered here, BEFORE binding and building the graph.
+tools = [ping_tool, web_search_tool]
 llm_with_tools = llm.bind_tools(tools)
+
 
 def call_model(state: MessagesState):
     response = llm_with_tools.invoke(state["messages"])
     return {"messages": [response]}
+
 
 builder = StateGraph(MessagesState)
 builder.add_node("agent", call_model)
@@ -35,7 +43,11 @@ builder.add_edge("tools", "agent")
 checkpointer = MemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 
+
 if __name__ == "__main__":
     config = {"configurable": {"thread_id": "test-thread"}}
-    result = graph.invoke({"messages": [("user", "Use the ping tool to say hello to fintech")]}, config=config)
+    result = graph.invoke(
+        {"messages": [("user", "Search the web for what MCC code 5411 means in credit card transactions")]},
+        config=config,
+    )
     print(result["messages"][-1].content)
