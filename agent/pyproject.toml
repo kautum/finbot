@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
-    "ag-ui-langgraph>=0.0.43",
+    "ag-ui-langgraph<0.0.43",
     "copilotkit>=0.1.95",
     "fastapi>=0.141.1",
     "langchain-groq>=1.1.3",

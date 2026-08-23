@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import os
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 
@@ -31,8 +32,10 @@ builder.add_edge(START, "agent")
 builder.add_conditional_edges("agent", tools_condition)
 builder.add_edge("tools", "agent")
 
-graph = builder.compile()
+checkpointer = MemorySaver()
+graph = builder.compile(checkpointer=checkpointer)
 
 if __name__ == "__main__":
-    result = graph.invoke({"messages": [("user", "Use the ping tool to say hello to fintech")]})
+    config = {"configurable": {"thread_id": "test-thread"}}
+    result = graph.invoke({"messages": [("user", "Use the ping tool to say hello to fintech")]}, config=config)
     print(result["messages"][-1].content)
