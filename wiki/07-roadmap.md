@@ -17,12 +17,10 @@ it is *under-built*. Almost everything below deepens the existing graph rather t
 | Step | Exit condition |
 |---|---|
 | 0.1 Owner picks Option A / B / C from [03](03-infrastructure-decision.md) §8 | A decision is written down |
-| 0.2 **Memory probe**: deploy a bare FastAPI + DuckDB service on the chosen host, run the six benchmark queries, report timings and peak RSS | 329 MB file demonstrably works in 512 MB RAM — **or** a fallback is chosen before anything is built on it |
+| 0.2 ~~Memory probe~~ **DONE** — [13](13-experiments.md) E1–E4 | ✅ Answered: only the **pre-joined** layout fits (183 MB vs 731 MB). Now a hard requirement in Phase 1. |
 | 0.3 Commit the uncommitted `run_sql` change on `main` | `git status` clean |
 | 0.4 Mark `PROGRESS.md` and plan v1/v2 superseded (done) | No doc contradicts [01](01-current-state.md) |
-
-**0.2 is the highest-value hour in the plan.** It is the only untested assumption underneath
-everything else ([03](03-infrastructure-decision.md) §8). Do it before Phase 1.
+| 0.5 *(optional, ~1 h)* Repeat the memory probe on a real Linux 512 MB cgroup | Confirms the macOS proxy before Phase 9 |
 
 **Recommendation: Option A** — DuckDB/Parquet data layer, Python backend on Render, Next.js on
 Vercel. No quota in the system can silently kill it.
@@ -33,6 +31,13 @@ Vercel. No quota in the system can silently kill it.
 
 Rewrite the ETL. The current `load_to_neon.py` carries four correctness bugs worth fixing while
 it is being touched anyway.
+
+> **0. Build a pre-joined `fact_transactions` table. This is now mandatory, not an optimisation.**
+> [13](13-experiments.md) E1–E3 measured the normalised layout at **731 MB peak RSS** — it does
+> not fit a 512 MB host. Pre-joined: **183 MB and 10× faster**. Working query in
+> `tools/experiments/e3_prejoined_fact.py`; builds in 2.5 s. 8,914,963 rows = the labeled subset,
+> with `is_fraud`, `mcc_description`, card and user attributes denormalised in.
+> Keep the raw tables available for the 33% unlabeled rows and for macro data.
 
 1. **Set-based load, not row-by-row.** `COPY` / `CREATE TABLE AS SELECT` from Parquet. DuckDB is
    not tuned for `to_sql()` inserts.
@@ -66,13 +71,25 @@ assertion check that reproduces the [02](02-data-dictionary.md) numbers exactly 
 
 This is security work, not polish. The tool as written would execute `DROP TABLE`.
 
-1. **Read-only at the driver**: `duckdb.connect(path, read_only=True)` or
-   `ATTACH '...' (READ_ONLY)`. On MotherDuck, a role-scoped read-only token or a read-only share.
-2. **`SELECT`/`WITH`-only string check** as defence in depth — never as the sole control.
+All of this is **verified working** in `tools/experiments/e5_safety.py` — copy from there.
+
+1. **Read-only at the driver.** Verified: it blocks `DROP`, `DELETE`, `UPDATE`, `CREATE` and
+   `INSERT`, while `SELECT` still works.
+   **Use the `:memory:` + ATTACH pattern, not `connect(read_only=True)`** — the latter also
+   blocks `CREATE VIEW`, so you could not define the governed views:
+   ```python
+   con = duckdb.connect(":memory:")
+   con.execute("ATTACH 'fact.duckdb' AS fact (READ_ONLY)")
+   con.execute("CREATE VIEW v_spend AS SELECT * FROM fact.fact_transactions WHERE amount > 0")
+   ```
+2. **`SELECT`/`WITH`/`DESCRIBE`-only string check** as defence in depth — never the sole control.
+   Verified to reject `DROP`, lowercase `delete`, `PRAGMA` and `ATTACH`.
 3. **Server-side `LIMIT` injection** when the model omits one.
-4. **Wall-clock timeout wrapper.** DuckDB has **no `statement_timeout`** and `con.interrupt()` is
-   documented as unreliable. Use `ThreadPoolExecutor` + `future.result(timeout=N)`, recycle the
-   connection if the interrupt doesn't land. Set `memory_limit` and `threads` at connect.
+4. **Wall-clock timeout wrapper.** Confirmed: DuckDB has **no `statement_timeout`** — both
+   `SET statement_timeout='1s'` and `=1000` raise *unrecognized configuration parameter*.
+   `ThreadPoolExecutor` + `future.result(timeout=N)` + `con.interrupt()` was verified to cut off
+   a runaway self-join at exactly 3.0 s, **with the connection still usable afterwards**.
+   Set `memory_limit` and `threads` at connect.
 5. **Rewrite the docstring to say DuckDB**, naming the high-risk gotchas
    ([03](03-infrastructure-decision.md) §6.3). MotherDuck's own blog is blunt about this:
    *"DuckDB has its own dialect and functions, and if you don't tell the model to use them,

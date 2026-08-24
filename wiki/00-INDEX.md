@@ -29,6 +29,7 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 | **[10 — Agent Instruction Design](10-agent-instruction-design.md)** | The system prompt, tool docstrings, and how to layer context. The agent has no prompt today. |
 | **[11 — UI Plan](11-ui-plan.md)** | CopilotKit's verified v2 API against the design system in `website-instructions.md`. |
 | **[12 — Sources](12-sources.md)** | Every URL behind the research, plus an explicit list of claims left unverified. |
+| **[13 — Experiments](13-experiments.md)** | **Seven experiments that validated the plan and changed three decisions.** Read alongside 03 and 07. |
 | [website-instructions.md](website-instructions.md) | Any frontend/visual design work. Pre-existing, account-wide, not Finbot-specific. |
 
 ## The five things that matter most
@@ -67,7 +68,12 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 
 ## Real findings already measured (use these in the demo)
 
-- **Online transactions are 28× more fraud-prone than swipe**: 0.8409% vs 0.0295% (chip 0.0992%).
+- **Channel drives a 353× fraud spread**: foreign merchant 5.577% · online 0.8378% · domestic
+  in-person 0.0158%. `merchant_state` secretly encodes all three, including NULL = online.
+- **The Italy anomaly** — the only foreign country with any fraud: 0% until 2016, then 59.7% /
+  89.9% / 85.1% in 2017–19 across 65 merchants. A datable breach signature. Best demo in the set.
+- **Online transactions are 28× more fraud-prone than swipe**: 0.8409% vs 0.0295% (chip 0.0992%),
+  z = 177.9, p ≈ 0.
 - **Highest-fraud MCCs**: Passenger Railways 2.004%, Gardening Supplies 1.282% — 8.1×–13.4× baseline.
 - **Credit score does not predict fraud victimhood**: good 0.155% / fair 0.146% /
   excellent 0.143% / **poor 0.124%** — the lowest rate sits with the weakest credit. A genuinely

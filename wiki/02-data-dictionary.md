@@ -56,11 +56,20 @@ A single consolidated `.duckdb` file containing all seven tables is **329 MB**.
    Fix at ETL time: `TRY_CAST(replace(amount,'$','') AS DECIMAL(10,2))`.
    Verified: **0 rows fail to parse** with this expression.
 2. Negative amounts silently distort every spend aggregate.
-3. **`merchant_state` is 11.75% NULL and mixes two value systems** — US state codes and full
-   country names. Any `GROUP BY merchant_state` silently drops 1.56M rows and puts `CA` and
-   `Canada` in the same column. This is the most dangerous trap in the dataset because, unlike
-   the `$`-string, it produces a *plausible* wrong answer instead of an error.
-4. `zip` as DOUBLE renders as `58523.0`.
+3. **`merchant_state` encodes three different things in one column** — and this is the most
+   valuable field in the dataset once you see it ([13](13-experiments.md) E7):
+   - a **US 2-letter state code** → domestic, in-person
+   - a **full country name** (`Mexico`, `Canada`, `Italy`, …) → foreign merchant
+   - **NULL** → **not missing data: this is the online channel.** 1,043,975 of the 1,047,865
+     NULLs in the labeled set are `Online Transaction`.
+
+   Fraud rates differ by **353×** across the three (0.0158% / 0.8378% / 5.577%). A naive
+   `GROUP BY merchant_state` drops the online segment entirely and puts `CA` beside `Canada`.
+   **Derive a `channel` column at ETL time** (`domestic` / `foreign` / `online`) — it is the
+   single highest-value transformation available.
+4. **`findex` indicator columns are `VARCHAR`, not numeric.** `avg(account_t_d)` fails with a
+   binder error; `TRY_CAST(... AS DOUBLE)` is required throughout.
+5. `zip` as DOUBLE renders as `58523.0`.
 
 ## 3. `fraud_labels` — and the rare-event problem
 
@@ -147,14 +156,16 @@ FROM transactions t JOIN findex fx ON t.merchant_state = fx.countrynewwb;  -- 10
 This links micro-level card behaviour to national financial-inclusion indicators — a genuinely
 cross-domain analysis, and the single most distinctive thing this dataset supports.
 
-> **Two cautions before using it.**
-> 1. `findex` holds **~49 rows per country** (multiple years × demographic groups), so a naive
->    join fans out ~49×. Aggregate transactions **first**, then join — or filter findex to one
->    `year` and `group`. Quote country counts, not joined row counts.
-> 2. It covers only the non-US slice. The US majority uses 2-letter state codes and will not
->    match. Say so when reporting.
+> **Three cautions, all measured ([13](13-experiments.md) E6).**
+> 1. The naive join fans out **55.9×** — 3,102,332 joined rows from **55,485 real transactions**,
+>    because `findex` holds ~49–56 rows per country (years × demographic groups). Aggregate
+>    transactions **first**, then join, or filter findex to one `year` and `group`.
+> 2. It reaches only **55,485 transactions — 0.4% of the labeled set** (the non-US slice), and
+>    most matched countries have **zero** fraud. Real, but analytically thin: treat it as a
+>    capability demonstration, not a headline finding.
+> 3. `findex` indicator columns are `VARCHAR`; cast before aggregating.
 >
-> The agent must be told both, or it will produce a confidently inflated number.
+> The agent must be told all three, or it will produce a confidently inflated number.
 
 There is no indicator-code dictionary — `fin11a` is opaque. Sourcing one is a small,
 high-value task; see [07](07-roadmap.md) Phase 1.
@@ -205,8 +216,16 @@ Scripts are committed at [`tools/profiling/`](../tools/profiling/). Run in order
 
 Not invented — measured:
 
+- **Channel is the strongest signal in the data — a 353× spread**
+  ([13](13-experiments.md) E7): foreign merchant **5.577%** (59,512 txns) · online **0.8378%**
+  (1,047,865) · domestic in-person **0.0158%** (7,807,586).
+- **The Italy anomaly — the single best finding.** Of every foreign country with ≥500
+  transactions, **only Italy has any fraud at all**. Zero from 2010–2016, then **59.7% (2017),
+  89.9% (2018), 85.1% (2019)**, across **65 merchants and 424 clients**. A textbook compromised-
+  merchant-cluster signature with a datable onset. (Synthetic data — say so when presenting.)
 - **Online transactions are 28× more fraud-prone than swipe.**
-  Online 0.8409% · Chip 0.0992% · Swipe 0.0295%. Large, clean, instantly legible.
+  Online 0.8409% · Chip 0.0992% · Swipe 0.0295%. Statistically confirmed: **z = 177.9, p ≈ 0**,
+  Online 95% CI [0.8236%, 0.8586%] vs Swipe [0.0280%, 0.0311%] — non-overlapping.
 - **Highest-fraud MCCs** (min 10k txns): Passenger Railways 2.004% · Gardening Supplies
   1.282% · Industrial Equipment 1.218% — **8.1× to 13.4×** the 0.1495% baseline.
 - **Credit score does not predict fraud victimhood** — all four bands, full result:
@@ -227,6 +246,13 @@ Not invented — measured:
 
 ### Statistical-power warning
 Of 109 MCC segments, **22 already have fewer than 10 fraud cases at full scale.** Fraud is
-rare enough that segmentation runs out of power fast. Any downsampling makes this
-dramatically worse and is the main technical argument against the sampling plan — see
+rare enough that segmentation runs out of power fast. Any downsampling makes this dramatically
+worse and is the main technical argument against the sampling plan — see
 [03](03-infrastructure-decision.md) §5.
+
+> **Gate on the absolute count of fraud cases, never on confidence-interval width.**
+> [13](13-experiments.md) E6 falsified the intuitive design: *Tolls and Bridge Fees* has
+> **0 fraud in 451,814 transactions** and therefore a CI only **0.001 pp** wide, while
+> *Department Stores* (2,251 fraud, real signal) has a **0.058 pp** interval. A width-based
+> rule would confidently report "Tolls have 0% fraud" and reject the segment that actually has
+> signal — exactly backwards. Refuse below ~30 positive cases.

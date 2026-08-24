@@ -74,15 +74,25 @@ contains it, because a human would have had to spot it and build it first.
 That is the real wedge — not "BI cannot join this", but **BI can only join what someone already
 modelled**. An agent that inspects the data can find the relationship at question time.
 
-> **The demo move**: *"Do merchants in countries with lower digital-account penetration see
-> different fraud rates?"* A question that requires discovering the join, spanning two datasets
-> nobody linked, answered live.
->
-> **Two caveats the agent must state** or the number is wrong: `findex` has ~49 rows per country
-> (years × demographic groups), so aggregate before joining or the count fans out ~49×; and it
-> covers only the non-US slice, since US rows use 2-letter state codes.
->
-> *(This wedge originally claimed no join key existed. A verification pass found one. Kept as a
+**But test the join before demoing it.** [13](13-experiments.md) E6 did: it covers only **55,485
+transactions (0.4% of the labeled set)**, the naive join fans out **55.9×**, the `findex`
+indicator columns are `VARCHAR` so `avg()` fails outright, and most matched countries have zero
+fraud. **It is a capability demonstration, not a headline.**
+
+The stronger version of the same wedge lives in the *same column*, and E7 found it — see the
+demo script in §5. `merchant_state` is not one field but three hidden segments:
+
+| Segment | Transactions | Fraud rate |
+|---|---:|---:|
+| US state code (domestic, in-person) | 7,807,586 | 0.0158% |
+| NULL — which is exactly the online channel | 1,047,865 | 0.8378% |
+| **Foreign country** | **59,512** | **5.577%** |
+
+**Foreign merchants carry 353× the fraud rate of domestic in-person.** Nobody modelled that,
+because it requires noticing that one column encodes three different things.
+
+> *(This wedge originally claimed no join key existed. A verification pass found one; an
+> experiment then showed the join was weak and surfaced something better. Kept visible as a
 > reminder that the dataset rewards inspection over assumption — which is the argument.)*
 
 ### Wedge 4 — the dashboard is opaque; Finbot shows its work
@@ -149,8 +159,21 @@ Order matters. Build credibility, then spend it.
    aggregate. It returns in well under a second. Sets the floor.
 2. **Ask the question no dashboard exists for.** Credit score vs fraud. The answer is *no
    relationship* — a negative result. Establishes measurement over agreement.
-3. **Ask a "why" question** that forces multi-step chaining. Show the trace panel: three queries,
-   each labelled, each citing its governed definition.
+3. **The centrepiece — a "why" question that forces multi-step chaining.**
+   *"Is fraud evenly distributed across geographies?"* All figures below are measured
+   ([13](13-experiments.md) E7), not illustrative:
+   - **Query 1** — foreign merchants 5.577%, online 0.8378%, domestic in-person 0.0158%.
+     A **353×** spread.
+   - **Query 2** — drill into foreign: of every country with ≥500 transactions, **only Italy has
+     any fraud at all**. Canada, Mexico, Japan, Spain, Netherlands: zero.
+   - **Query 3** — drill into Italy by year: **0% for 2010–2016, then 59.7% (2017), 89.9%
+     (2018), 85.1% (2019)**, concentrated in **65 merchants across 424 clients**.
+
+   Three chained queries, a real narrative, and an unambiguous conclusion: the signature of a
+   compromised merchant cluster with a datable onset. Show the trace panel doing it.
+
+   **Say that the data is synthetic**, so this is a generated pattern rather than a real breach.
+   Saying so costs nothing and is exactly the calibration that makes the rest believable.
 4. **The significance moment.** "Is online fraud *significantly* higher than swipe?" p-value and
    confidence interval. 0.8409% vs 0.0295% — a 28× gap, and now a *defensible* one.
 5. **The refusal.** Ask for fraud rate in a thin segment. Finbot declines and explains the power

@@ -212,22 +212,31 @@ available; exactly one new account (Render).
 *Cons:* two deployments; ~1 min cold start after 15 min idle; **and one untested assumption —
 see the risk below.**
 
-> ### ⚠ The one thing Option A has NOT been validated on
-> Render's free web service gives **512 MB RAM and 0.1 CPU**. Option A puts a **329 MB DuckDB
-> file** behind a Python process running langgraph + langchain + duckdb on that box. Nobody has
-> tested whether it fits or performs.
+> ### ✅ TESTED — and it only works one way
+> This was the plan's top risk. [13](13-experiments.md) E1–E4 measured it under a conservative
+> proxy for Render free (`memory_limit`, `threads=1`):
 >
-> Reasons for cautious optimism: DuckDB memory-maps its file rather than loading it into RAM,
-> streams results, and honours a `memory_limit` setting with spill-to-disk. Reasons for caution:
-> the 3–130 ms benchmarks were on a warm multi-core laptop, **not** on 0.1 CPU, and the
-> `08-positioning.md` demo script promises sub-second responses.
+> | Storage approach | Peak RSS | Slowest query |
+> |---|---:|---:|
+> | Normalised `.duckdb` (329 MB) | **731 MB** ❌ | 1,490 ms |
+> | Parquet views (219.9 MB) | **687 MB** ❌ | 1,551 ms |
+> | **Pre-joined `fact_transactions` (264 MB)** | **183 MB** ✅ | **153 ms** |
 >
-> **This is the first thing to test in Phase 0** — before building anything on top of it.
-> Cheapest probe: deploy a bare FastAPI + DuckDB service that runs the six benchmark queries and
-> reports timings and peak RSS. An hour of work that de-risks the whole plan.
-> Fallbacks if it fails, in order: (1) set `memory_limit='300MB'` and reduce `threads`;
-> (2) drop `transactions` to the labeled subset only, halving the file; (3) move to Modal or
-> Beam (real containers, $30/mo credit, no card) — one different signup, not an extra one.
+> **The naive versions of Option A fail.** The cost is the repeated 13.3M × 8.9M hash join, not
+> the file format — and `memory_limit` does not contain it, because the growth is mmap'd pages.
+>
+> **Materialising the join at ETL time fixes it completely**: 4× less memory, 10× faster, 2.5 s
+> to build offline. Adding the measured Python stack (135 MB, and ~90 MB more for
+> duckdb/scipy/statsmodels) gives **≈410 MB against a 512 MB ceiling** — workable, with the
+> explicit requirement to **keep `pandas` (43 MB) out of the runtime image**.
+>
+> **So Option A is viable *only* with a pre-joined fact table.** That is now a hard requirement
+> of the design, not an optimisation — see [07](07-roadmap.md) Phase 1.
+>
+> Remaining caveat: measured on macOS, where `ru_maxrss` counts mmap'd pages Linux can reclaim.
+> A real Linux 512 MB cgroup test is still worth an hour before Phase 5.
+> Fallbacks if it fails there: drop `transactions` to the labeled subset; or move to Modal /
+> Beam (real containers, $30 credit, no card) — a different signup, not an extra one.
 
 **Option B — Single deployment.**
 Rewrite the agent in LangGraph.js, run in-process in Next.js on Vercel, DuckDB via
@@ -242,5 +251,23 @@ As Option A, but MotherDuck as the primary store rather than a bundled file.
 *Cons:* reintroduces an account that can be suspended "for any reason" — the one risk class
 this project has been burned by twice.
 
-**My recommendation: Option A**, with the `run_sql` tool written against an interface that lets
+**My recommendation: Option A, in its pre-joined form** — now the only variant measured to fit
+([13](13-experiments.md) E1–E4) — with `run_sql` written against an interface that lets
 MotherDuck be swapped in later without touching the agent.
+
+### The concrete shape of the recommended build
+
+```
+GitHub Releases          fact_transactions.duckdb (264 MB), built offline at ETL time
+      │                  + the 3 macro/reference parquet files
+      ▼  downloaded at container build/startup
+Render free              FastAPI + LangGraph + DuckDB (no pandas at runtime)
+      │                  con = duckdb.connect(":memory:")
+      │                  con.execute("ATTACH 'fact.duckdb' AS fact (READ_ONLY)")
+      │                  + governed views + 30s thread timeout + SELECT-only guard
+      ▼  HTTPS
+Vercel                   Next.js + CopilotKit
+```
+
+New accounts required: **one** (Render). Data-layer quotas: **none**.
+Measured: ~410 MB RSS, 153 ms worst query.
