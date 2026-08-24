@@ -56,7 +56,9 @@ dimensions:
     values: ["Online", "In-person (domestic)", "In-person (foreign)"]
 
   - name: mcc_description
-    description: Merchant category, e.g. "Grocery Stores". 109 distinct values.
+    description: >
+      Merchant category, e.g. "Grocery Stores". 108 distinct values -- there are 109
+      distinct `mcc` codes, but two of them share a description.
 
   - name: card_brand
     description: Visa, Mastercard, Amex, Discover.
@@ -74,5 +76,6 @@ dimensions:
 
 statistical_guardrail: >
   Fraud is a rare event -- 13,332 cases in 8.9M rows, 0.1495%. Do not compare or rank
-  segments with fewer than 30 fraud cases; say the sample is too small instead. 22 of
-  the 109 merchant categories have fewer than 10 fraud cases even at full scale.
+  segments with fewer than 30 fraud cases; say the sample is too small instead. This is
+  not a corner case: 47 of the 108 merchant categories fall below that line, and 22 have
+  fewer than 10 fraud cases even at full scale.

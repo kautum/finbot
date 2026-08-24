@@ -20,6 +20,8 @@ from copilotkit.langgraph_agui_agent import LangGraphAGUIAgent
 from ag_ui_langgraph import add_langgraph_fastapi_endpoint
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+import catalog
+import db
 from agent import graph_builder
 
 CHECKPOINTS = os.environ.get("FINBOT_CHECKPOINTS", "finbot_checkpoints.db")
@@ -42,9 +44,18 @@ async def main():
             path="/",
         )
 
+        # Computed once at startup: the panel is read-only and the data never changes
+        # under it, so recomputing per request would only add latency.
+        overview = catalog.build(db.connect())
+
         @app.get("/health")
         def health():
             return {"ok": True}
+
+        @app.get("/overview")
+        def get_overview():
+            """What is in the dataset and what can be asked of it, for the UI panel."""
+            return overview
 
         await uvicorn.Server(
             uvicorn.Config(app, host="0.0.0.0", port=PORT, log_level="warning")

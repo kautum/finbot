@@ -23,40 +23,56 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 |---|---|
 | **[01 — Current State](01-current-state.md)** | Always. What actually exists, verified against the working tree, plus four errors in the older planning docs. |
 | **[02 — Data Dictionary](02-data-dictionary.md)** | Before writing any SQL or metric. Measured schema, row counts, data-quality traps, query benchmarks. |
-| **[03 — Infrastructure Decision](03-infrastructure-decision.md)** | **Before touching the ETL or `.env`. This is the live blocker.** |
+| **[03 — Infrastructure Decision](03-infrastructure-decision.md)** | Before choosing a host. The *data* blocker is resolved (local DuckDB); **backend hosting is still open**. |
 | **[04 — Competitive Research](04-competitive-research.md)** | When deciding what to build and what to skip. |
 | **[05 — Agent Stack Research](05-research-agent-stack.md)** | Before touching CopilotKit, LangGraph, Groq or the stats tools. Version-sensitive. |
 | **[06 — Memory & Knowledge Graph](06-memory-and-knowledge-graph.md)** | When memory or `build-kg` comes up. |
 | **[07 — Roadmap](07-roadmap.md)** | To know what to do next and in what order. |
 | **[08 — Positioning](08-positioning.md)** | How Finbot competes with BI tools and wins — the product argument, the demo script, and the claims never to make. |
 | **[09 — Open-Source Landscape](09-open-source-landscape.md)** | What to steal from WrenAI/Vanna/DB-GPT, and the evidence-backed verdict on multi-agent (no). |
-| **[10 — Agent Instruction Design](10-agent-instruction-design.md)** | The system prompt, tool docstrings, and how to layer context. The agent has no prompt today. |
+| **[10 — Agent Instruction Design](10-agent-instruction-design.md)** | The system prompt, tool docstrings, and how to layer context. A prompt now exists in `agent/agent.py`; this page is the design rationale. |
 | **[11 — UI Plan](11-ui-plan.md)** | CopilotKit's verified v2 API against the design system in `website-instructions.md`. |
 | **[12 — Sources](12-sources.md)** | Every URL behind the research, plus an explicit list of claims left unverified. |
 | **[13 — Experiments](13-experiments.md)** | **Eleven experiments that validated the plan and changed nine decisions.** Read alongside 03 and 07. |
+| **[15 — Statistics](15-statistics.md)** | Before touching `agent/statistics.py` or claiming anything about significance. Contains the Cohen's-h rare-event finding. |
+| **[16 — UI Build](16-ui-build.md)** | Before any frontend work. What is actually on screen, the CopilotKit v2 gotchas, and five bugs this build surfaced. Supersedes the speculative half of 11. |
 | [website-instructions.md](website-instructions.md) | Any frontend/visual design work. Pre-existing, account-wide, not Finbot-specific. |
 
-## The five things that matter most
+## The seven things that matter most
 
 1. **The dataset is 220 MB, not 1.3 GB.** As Parquet+zstd the whole thing is 219.9 MB; a single
    `.duckdb` file is 329 MB. Analyst queries over all 22.5M rows run in **3–130 ms**. Both
    previous hosting failures came from forcing a columnar dataset into a row-store, where it
    inflates to 2–4 GB. **The data was never too big — the storage engine was wrong.**
 
-2. **Nothing currently connects to a database with data in it.** `agent/.env` points at the
-   capacity-blocked Neon project. The CockroachDB cluster is quota-disabled. This is the blocker.
+2. **The database blocker is resolved.** `tools/etl/build_fact.py` builds
+   `data/finbot.duckdb` (292 MB) from `Datasets/`, and the agent queries it read-only. No
+   hosted provider is involved and none is needed locally. `agent/.env` still holds a stale
+   `DATABASE_URL` pointing at the dead Neon project — it is unused and should be removed.
+   **Hosting the backend is still open** ([03](03-infrastructure-decision.md)).
 
 3. **Fraud is 0.1495%** — 13,332 cases in 8,914,963 labeled rows. And **33% of transactions have
    no fraud label at all**. Any fraud metric computed over all transactions is wrong by ~33%.
    This single fact drives the semantic layer, the sampling verdict, and the stats guardrails.
 
-4. **The agent is under-built, not wrong.** 65 lines: one ReAct loop, no system prompt, no plan,
-   no trace, no semantic layer, no read-only enforcement. Julius AI proves single-agent chat is
-   a viable shape. Deepen it, don't replace it.
-   **The full stack has now been proven end-to-end** ([13](13-experiments.md) E11) — Next.js →
-   CopilotKit → AG-UI → LangGraph → Groq → DuckDB, answering correctly in the chat.
+4. **The agent is built and answering.** Next.js → CopilotKit → AG-UI → LangGraph → Groq →
+   DuckDB, end to end, with a system prompt, a YAML metric registry, governed views,
+   driver-level read-only, a structurally enforced query budget, inline charts and a visible
+   SQL trace. Still single-agent, which the research supports ([09](09-open-source-landscape.md)).
+   What is missing: stats wiring ([15](15-statistics.md) §6) and deployment.
 
-5. **The highest-leverage work is the YAML metric registry plus the reasoning-trace panel,
+5. **Cohen's h is unusable on this data and would have produced a confidently wrong
+   headline.** It scores the 53× online-vs-in-person fraud gap as "negligible", because the
+   arcsine transform compresses as p approaches zero. Practical significance is judged on
+   the **risk ratio** instead. Full working in [15](15-statistics.md) §1.
+
+6. **A prompt instruction is advice; only structure is a rule.** Measured repeatedly: the
+   4-query budget was ignored until enforced in code (15+ queries on one question), the
+   governed views work because the wrong rows are unreachable, and read-only holds because
+   it is set at the driver. Every rule left in prose was eventually ignored.
+   See [16](16-ui-build.md) §5.
+
+7. **The highest-leverage work is the YAML metric registry plus the reasoning-trace panel,
    shipped together** — roughly two days for the largest share of demo credibility. The trace
    becomes convincing exactly when it can say *"used the governed definition of `fraud_rate`."*
    The industry name for the problem it solves is **metric drift**, and every vendor in this
@@ -67,8 +83,9 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 
 - **Zero billing.** No credit card at any provider. Not "free tier with a card on file." Firm
   until the product is proven. Never propose "just enable billing" as a first-choice fix.
-- **Confirm the database decision with the owner before touching `load_to_neon.py` or `.env`.**
-  Two provider switches already caused significant rework.
+- **Confirm any change of data backend with the owner first.** Two provider switches already
+  caused significant rework. The current answer is a local DuckDB file built by
+  `tools/etl/build_fact.py`; `load_to_neon.py` is dead and kept only as history.
 - **Never expose `card_number` or `cvv`.** Synthetic, but they look exactly like real PANs/CVVs.
 - **Read-only must be enforced at the database driver, not in the prompt.**
 
@@ -80,7 +97,11 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
   89.9% / 85.1% in 2017–19 across 65 merchants. A datable breach signature. Best demo in the set.
 - **Online transactions are 28× more fraud-prone than swipe**: 0.8409% vs 0.0295% (chip 0.0992%),
   z = 177.9, p ≈ 0.
-- **Highest-fraud MCCs**: Passenger Railways 2.004%, Gardening Supplies 1.282% — 8.1×–13.4× baseline.
+- **Highest-fraud MCCs depend entirely on the minimum-volume filter, so always state it.**
+  With no floor: Cruise Lines **59.78%** (165/276) and Music Stores 37.25% (76/204). Filtered
+  to categories with >10,000 transactions: Passenger Railways 2.004%, Gardening Supplies
+  1.282%. Both are correct; quoting either without the filter is not. 47 of 108 categories
+  have fewer than 30 fraud cases ([15](15-statistics.md)).
 - **Credit score does not predict fraud victimhood**: good 0.155% / fair 0.146% /
   excellent 0.143% / **poor 0.124%** — the lowest rate sits with the weakest credit. A genuinely
   interesting negative result, because it contradicts the obvious hypothesis.

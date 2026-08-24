@@ -1,37 +1,87 @@
 /* Finbot design tokens.
-   Palette derived from the Linear system in wiki/website-instructions.md §4:
-   hierarchy comes from a stepped surface ladder, not drop shadows, and the accent is
-   never decorative -- it belongs to the data, the focus ring, and nothing else. */
+
+   Two themes off one token set. Light is the default: every product in this space
+   (Genie, Spotter, Hex) is light by default, and an analyst tool reads as a workspace
+   rather than a terminal.
+
+   Rule carried over from wiki/website-instructions.md §4: the brand colour is never
+   decorative. It belongs to the brand mark, focus rings, primary actions, and the data
+   itself. Page furniture does not get to glow.
+
+   Naming note: the brand colour is `--brand`, not `--accent`, because CopilotKit's
+   stylesheet already owns `--accent` as a *surface* token. Two different meanings on
+   one name is how a theme quietly falls apart. */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --bg: #010102;
-  --surface-1: #0f1011;
-  --surface-2: #141516;
-  --surface-3: #18191a;
-  --line: #232425;
-  --line-soft: #1b1c1d;
+  --bg: #fbfbfa;
+  --surface-1: #ffffff;
+  --surface-2: #f4f4f2;
+  --surface-3: #ebebe8;
+  --line: #e2e2de;
+  --line-soft: #ededea;
 
-  --ink: #f4f4f6;
-  --ink-dim: #9b9ba1;
-  --ink-faint: #6a6a70;
+  --ink: #1a1a19;
+  --ink-dim: #5f5f5a;
+  --ink-faint: #8a8a83;
 
-  --accent: #5e6ad2;
-  --accent-ink: #a5adf0;
+  --brand: #0f6e5c;
+  --brand-hover: #0b584a;
+  --brand-wash: #e6f1ee;
+  --on-brand: #ffffff;
 
-  /* Data colours. These exist only inside charts. */
-  --data-1: #5e6ad2;
-  --data-2: #4cb782;
-  --data-3: #d4a04c;
-  --data-4: #c25f6b;
+  /* Data colours. These appear inside charts and status dots, nowhere else.
+     Red means fraud throughout -- semantic, not ornamental. */
+  --data-1: #2563a8;
+  --data-2: #1c8a6a;
+  --data-3: #b8801c;
+  --data-4: #c0453f;
+  --data-5: #6b52a8;
 
-  --r-sm: 4px;
-  --r-md: 6px;
-  --r-lg: 10px;
+  --shadow-sm: 0 1px 2px rgba(20, 20, 18, 0.05);
+  --shadow-md: 0 2px 6px rgba(20, 20, 18, 0.07), 0 1px 2px rgba(20, 20, 18, 0.05);
+
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root[data-theme="dark"],
+:root.dark {
+  color-scheme: dark;
+
+  /* Lifted well off pure black: the first version read as a terminal. */
+  --bg: #16171a;
+  --surface-1: #1d1e22;
+  --surface-2: #24252a;
+  --surface-3: #2c2d33;
+  --line: #34353c;
+  --line-soft: #292a30;
+
+  --ink: #f0f0f2;
+  --ink-dim: #a6a6ae;
+  --ink-faint: #76767f;
+
+  --brand: #35b39a;
+  --brand-hover: #45c4aa;
+  --brand-wash: #1b2f2b;
+  --on-brand: #0d1614;
+
+  --data-1: #5b9bd5;
+  --data-2: #35b39a;
+  --data-3: #d4a24c;
+  --data-4: #e0665f;
+  --data-5: #9b84d8;
+
+  /* Depth on dark comes from the surface ladder, not shadows. */
+  --shadow-sm: none;
+  --shadow-md: none;
 }
 
 * {
@@ -50,14 +100,36 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
   border-radius: var(--r-sm);
 }
 
-/* Any number the user might compare against another number. */
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/* Interactive surfaces: a card that responds to the pointer, and a press that
+   registers. Hover is gated on a fine pointer so touch devices do not get stuck
+   in a hover state. */
+.pressable {
+  transition:
+    background-color 180ms var(--ease),
+    border-color 180ms var(--ease),
+    transform 140ms var(--ease),
+    box-shadow 180ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .pressable:hover {
+    border-color: var(--brand);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+}
+
+.pressable:active {
+  transform: translateY(0) scale(0.995);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -68,38 +140,75 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+
+  .pressable:hover {
+    transform: none;
+  }
 }
 
 /* ---- CopilotKit v2 theme -------------------------------------------------
-   v2 ships a Tailwind stylesheet using shadcn token names, themed by a `.dark`
-   class on <html>. Rather than fighting its classes, its tokens are remapped
-   onto the surface ladder above so the chat inherits the same palette. */
+   v2 ships a Tailwind stylesheet on shadcn token names. Remapping those onto the
+   tokens above lets the chat inherit the palette instead of fighting its classes.
+   Note --accent here is CopilotKit's hover-surface token, not the brand colour. */
 
-.dark {
+:root,
+:root[data-theme="dark"],
+:root.dark {
   --background: var(--bg);
   --foreground: var(--ink);
   --card: var(--surface-1);
   --card-foreground: var(--ink);
-  --popover: var(--surface-2);
+  --popover: var(--surface-1);
   --popover-foreground: var(--ink);
-  --primary: var(--ink);
-  --primary-foreground: var(--bg);
+  --primary: var(--brand);
+  --primary-foreground: var(--on-brand);
   --secondary: var(--surface-2);
   --secondary-foreground: var(--ink);
   --muted: var(--surface-2);
   --muted-foreground: var(--ink-dim);
-  --accent: var(--surface-3);
+  --accent: var(--surface-2);
   --accent-foreground: var(--ink);
   --border: var(--line);
   --input: var(--line);
-  --ring: var(--accent);
+  --ring: var(--brand);
 }
 
-/* Chat prose. Numbers get tabular figures wherever they appear. */
+/* The chat paints its own white card at several levels; the page already provides
+   the surface, and in dark mode these hardcoded whites are what made it look broken. */
+.copilotKitChat,
+.copilotKitMessages,
+.copilotKitMessage,
+.copilotKitAssistantMessage {
+  background: transparent !important;
+}
+
+/* The input itself is an opaque pill so messages scrolling under it stay legible;
+   the wrapper around it should not also paint a slab. */
+.copilotKitInput {
+  background: var(--surface-1) !important;
+  border-color: var(--line) !important;
+}
+
+.copilotKitChat [class*="pointer-events-none"][class*="z-20"] {
+  background: transparent !important;
+}
+
+/* While the onboarding hero is on screen, the chat's built-in "How can I help you
+   today?" is a second, competing headline -- and its vertically-centred empty state
+   pushes the input far below the starter questions. Both are suppressed until the
+   first message, after which the chat lays itself out normally. */
+.finbot-onboarding .copilotKitChat h1 {
+  display: none;
+}
+
+.finbot-onboarding .copilotKitChat [class*="justify-center"] {
+  justify-content: flex-start !important;
+}
+
 .copilotkit-assistant-message,
 [data-copilotkit-assistant-message] {
   font-size: 14.5px;
-  line-height: 1.62;
+  line-height: 1.65;
 }
 
 .copilotkit-assistant-message table,

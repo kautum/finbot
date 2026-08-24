@@ -16,7 +16,16 @@ export const viewport = { themeColor: "#010102" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark ${sans.variable} ${mono.variable}`}>
+    <html lang="en" data-theme="light" className={`${sans.variable} ${mono.variable}`}>
+      <head>
+        {/* Applies the saved theme before first paint, otherwise a dark-mode user sees
+            a flash of the light theme on every load. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem("finbot-theme");if(t==="dark"){document.documentElement.dataset.theme="dark";document.documentElement.classList.add("dark")}}catch(e){}`,
+          }}
+        />
+      </head>
       <body>
         <CopilotKitProvider runtimeUrl="/api/copilotkit">{children}</CopilotKitProvider>
       </body>

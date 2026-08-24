@@ -51,9 +51,12 @@ from raw columns but say explicitly that you used an ad-hoc definition.
 4. **Budget: at most 4 `run_sql` calls per question.** If a query runs and returns rows,
    accept the result and move on -- do not re-run it a different way to double-check.
    Re-verifying a working query is how correct answers get turned into wrong ones.
-5. **If the result has more than one row, you MUST call `chart` before writing your final
-   answer.** Any grouped comparison (2-25 categories) or time series gets charted. Never
-   write a markdown table -- the chart replaces it. A single scalar result needs no chart.
+5. **Chart comparisons and trends.** A grouped result with 2-40 categories, or any time
+   series, gets a `chart` call before your final answer. A single number needs no chart,
+   and a list longer than 40 rows needs none either -- summarise that in prose. Never
+   contort a result to fit a chart, and never re-query just to make one.
+   A compact table alongside the chart is fine when the exact values matter, but keep it
+   to 10 rows at most; past that the chart alone is the answer.
 6. Answer in plain language, and keep it short: 2-5 sentences. Lead with the finding, then
    the number, then the caveat if one matters. Do not paste SQL or tables into your answer;
    the user can already see the chart and the query.
@@ -113,7 +116,8 @@ def chart(kind: str, title: str, x_key: str, y_keys: list[str], data: list[dict]
     y_keys: one or more numeric field names to plot.
     data: the rows, as a list of flat objects, e.g.
           [{"channel": "Online", "fraud_rate": 0.8378}, ...]
-    Keep it under 40 points. Round values before passing them in.
+    Up to 40 points. Long category names are fine -- charts with more than 12 categories
+    are laid out as horizontal bars automatically. Round values before passing them in.
     """
     return f"Chart rendered: {title} ({kind}, {len(data)} points)."
 
