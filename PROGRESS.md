@@ -1,3 +1,8 @@
+> **SUPERSEDED (2026-08-24) — retained as history only.**
+> This file describes an abandoned pandas-over-local-CSV design. The current source of truth is
+> [`wiki/00-INDEX.md`](wiki/00-INDEX.md); the specific errors here are catalogued in
+> [`wiki/01-current-state.md`](wiki/01-current-state.md) §6.3.
+
 # FinBot — Project Wiki & Progress Log
 
 A local-first data-science chatbot for the fintech domain, built with CopilotKit (generative UI in chat), a LangGraph agent, and Groq for LLM inference.

@@ -1,3 +1,7 @@
+> **SUPERSEDED (2026-08-24) — retained as history only.**
+> Superseded first by v2 and now by the wiki. Current source of truth:
+> [`wiki/00-INDEX.md`](wiki/00-INDEX.md). Current roadmap: [`wiki/07-roadmap.md`](wiki/07-roadmap.md).
+
 # Finbot — Project Plan & Roadmap
 
 _Compiled from our full planning conversation, plus additional research on ways to strengthen the build. Last updated: 23 Aug 2026._
