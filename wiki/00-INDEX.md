@@ -24,6 +24,7 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 | **[05 — Agent Stack Research](05-research-agent-stack.md)** | Before touching CopilotKit, LangGraph, Groq or the stats tools. Version-sensitive. |
 | **[06 — Memory & Knowledge Graph](06-memory-and-knowledge-graph.md)** | When memory or `build-kg` comes up. |
 | **[07 — Roadmap](07-roadmap.md)** | To know what to do next and in what order. |
+| **[08 — Positioning](08-positioning.md)** | How Finbot competes with BI tools and wins — the product argument, the demo script, and the claims never to make. |
 | [website-instructions.md](website-instructions.md) | Any frontend/visual design work. Pre-existing, account-wide, not Finbot-specific. |
 
 ## The five things that matter most
@@ -47,6 +48,9 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 5. **The highest-leverage work is the YAML metric registry plus the reasoning-trace panel,
    shipped together** — roughly two days for the largest share of demo credibility. The trace
    becomes convincing exactly when it can say *"used the governed definition of `fraud_rate`."*
+   The industry name for the problem it solves is **metric drift**, and every vendor in this
+   space now agrees the semantic layer — not the model — is the fix. See
+   [08 — Positioning](08-positioning.md).
 
 ## Hard constraints — do not violate
 
