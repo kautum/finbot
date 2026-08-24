@@ -9,9 +9,27 @@
 | Constraint | Detail |
 |---|---|
 | **Zero billing** | No credit card at any provider. Not "free tier with a card on file." Firm. |
+| **Minimum service count** | *"Too many cooks spoil the broth."* Every new SaaS signup is a new account, quota, dashboard and failure mode. **Adding a provider must be justified, not defaulted to.** |
 | **Publicly reachable** | A future Vercel deployment must reach it. Not localhost, not a laptop, not a tunnel. |
 | **Analytical workload** | An LLM issuing repeated exploratory GROUP BY / JOIN / window queries. |
 | **Real scale** | 22.5M rows. But see §2 — the "scale" framing was the mistake. |
+
+### Service-count budget
+
+Accounts already held: **Groq, Tavily, GitHub, Neon** (dead), CockroachDB (dead).
+Vercel is required for the frontend regardless.
+
+| Verdict | Service |
+|---|---|
+| **Already have — prefer these** | GitHub, Groq, Tavily |
+| **Required, unavoidable** | Vercel (frontend) |
+| **At most ONE new signup** | a backend host (see §4B) |
+| **Rejected on service-count grounds** | MotherDuck, Hugging Face, Langfuse, LangSmith, CopilotKit Enterprise Intelligence, Zep — each solves a problem that a file or a table already solves |
+
+This constraint changes one earlier recommendation: **do not host the Parquet on Hugging Face.**
+GitHub Releases accepts files up to 2 GB, serves them over HTTPS with Range-request support, and
+**requires no new account.** For a 220 MB Parquet set or a 329 MB DuckDB file that is strictly
+better under this budget.
 
 ## 2. The reframe that solves this
 
@@ -24,8 +42,15 @@ Both previous failures came from putting a **columnar analytical dataset into a 
 | **Parquet + zstd** | **219.9 MB** |
 | Single consolidated `.duckdb` file | 329 MB |
 
-Measured, not estimated ([02](02-data-dictionary.md) §1). The dataset is **6× smaller than the
-Neon free tier** once stored columnar. Every query in the benchmark suite ran in **3–130 ms**.
+Measured, not estimated ([02](02-data-dictionary.md) §1). Two distinct numbers, not to be
+conflated:
+
+- **Compression ratio**: 1.3 GB raw → 219.9 MB Parquet = **5.9× smaller**.
+- **Headroom against a 512 MB tier**: 219.9 MB is **2.3× under** it.
+
+(Neon stores Postgres pages, not Parquet files, so the comparison is illustrative of *scale*,
+not a claim you could load Parquet into Neon.) Every query in the benchmark suite ran in
+**3–130 ms** — under best-case local conditions; see [02](02-data-dictionary.md) §6.
 
 **The dataset was never too big. The storage engine was wrong.** This also retires the sampling
 question — see §5.
@@ -83,10 +108,15 @@ accounts must upgrade (add a card) for more volume, and that *"MotherDuck may su
 Account at any time and for any reason."* The exact behaviour at the 10-hour line is
 undocumented. There is no confirmed real-time quota meter on Lite.
 
-> **Recommendation for 4A: make the DuckDB file / Parquet the load-bearing path, and treat
-> MotherDuck as an optional accelerant behind the same `run_sql` interface.** That way no
-> provider can disable the demo. This is the first architecture in this project's history with
-> **no quota that can kill it.**
+> **Recommendation for 4A: make the DuckDB file / Parquet the load-bearing path, distributed
+> via GitHub Releases, and skip MotherDuck entirely** (service-count budget, §1). Keep
+> `run_sql` behind an interface so MotherDuck can be swapped in later without touching the agent.
+>
+> **This is the first data layer in this project's history with no quota that can kill it** —
+> there is no account and no meter. Note the scope: the *data layer* becomes quota-free. The
+> system as a whole still has one live quota, Groq's 200,000 tokens/day
+> ([05](05-research-agent-stack.md) §3), which is handled separately in
+> [07](07-roadmap.md) Phase 9.
 
 ### 4B — Backend hosting
 
@@ -104,6 +134,10 @@ undocumented. There is no confirmed real-time quota meter on Lite.
 `@copilotkit/runtime/langgraph`, which wraps a compiled TypeScript `CompiledStateGraph`
 **running in the same Node process as the Next.js API route** — no network hop, no second
 deployment. `@langchain/groq` and `@langchain/tavily` both exist with matching interfaces.
+
+> **Caveat**: LangGraph.js checkpointer and streaming *parity* with Python is reported by
+> third-party trackers, not by an official LangChain parity matrix. Treat as
+> **corroborated but not primary-sourced** — verify before betting the architecture on it.
 
 Cost of that path: the ~65-line Python agent gets rewritten in TS (roughly a day), and DuckDB
 access from Node uses `@duckdb/node-api` (the old `duckdb` npm package is deprecated).
@@ -171,10 +205,29 @@ column names.
 
 ## 8. THE DECISION REQUIRED FROM THE OWNER
 
-**Option A — Recommended. Zero-quota, two hosts.**
-DuckDB file (or HF Parquet) as the data layer, Python backend on Render free, Next.js on Vercel.
-*Pros:* no quota can kill it; keeps the working Python agent; scipy/statsmodels available.
-*Cons:* two deployments; ~1 min cold start after 15 min idle.
+**Option A — Recommended. Zero-quota data layer, one new signup.**
+DuckDB file distributed via GitHub Releases, Python backend on Render free, Next.js on Vercel.
+*Pros:* no data-layer quota can kill it; keeps the working Python agent; scipy/statsmodels
+available; exactly one new account (Render).
+*Cons:* two deployments; ~1 min cold start after 15 min idle; **and one untested assumption —
+see the risk below.**
+
+> ### ⚠ The one thing Option A has NOT been validated on
+> Render's free web service gives **512 MB RAM and 0.1 CPU**. Option A puts a **329 MB DuckDB
+> file** behind a Python process running langgraph + langchain + duckdb on that box. Nobody has
+> tested whether it fits or performs.
+>
+> Reasons for cautious optimism: DuckDB memory-maps its file rather than loading it into RAM,
+> streams results, and honours a `memory_limit` setting with spill-to-disk. Reasons for caution:
+> the 3–130 ms benchmarks were on a warm multi-core laptop, **not** on 0.1 CPU, and the
+> `08-positioning.md` demo script promises sub-second responses.
+>
+> **This is the first thing to test in Phase 0** — before building anything on top of it.
+> Cheapest probe: deploy a bare FastAPI + DuckDB service that runs the six benchmark queries and
+> reports timings and peak RSS. An hour of work that de-risks the whole plan.
+> Fallbacks if it fails, in order: (1) set `memory_limit='300MB'` and reduce `threads`;
+> (2) drop `transactions` to the labeled subset only, halving the file; (3) move to Modal or
+> Beam (real containers, $30/mo credit, no card) — one different signup, not an extra one.
 
 **Option B — Single deployment.**
 Rewrite the agent in LangGraph.js, run in-process in Next.js on Vercel, DuckDB via

@@ -16,7 +16,7 @@ finbot/
 │   ├── test_neon.py            DB connectivity smoke test (SELECT version())
 │   ├── main.py                 uv scaffold stub, unused
 │   ├── pyproject.toml          dependency manifest
-│   ├── .env                    4 secrets, gitignored          [NOT committed - verified]
+│   ├── .env                    3 secrets + 1 config var        [NOT committed - verified]
 │   └── .agents/skills/         neon + neon-postgres skills    [gitignored]
 ├── frontend/                   Next.js 16.3.2 + React 19.2.8 + CopilotKit 1.69
 │   ├── app/layout.tsx          <CopilotKit runtimeUrl="/api/copilotkit" agent="finbot_agent">
@@ -101,14 +101,52 @@ Four corrections, all verified by execution:
 
 ## 7. Git state
 
-- Branch `main` @ `b76c909`, clean except:
-  - `agent/agent.py` — **modified, uncommitted**: the `ping_tool` -> `run_sql` swap. This is
-    real working code and should be committed.
-  - `finbot-project-plan-v2.md` — untracked.
-  - `wiki/` — untracked.
-- 12 commits total. Remote `origin/main` exists and is in sync.
+As of the wiki being written (2026-08-24):
 
-## 8. Version drift found in the manifest
+- `main` @ `b76c909`, 12 commits, in sync with `origin/main`.
+- **`agent/agent.py` is modified and uncommitted on `main`** — the `ping_tool` -> `run_sql` swap.
+  This is real working code and should be committed. It was deliberately left untouched by the
+  wiki work rather than committed on the owner's behalf.
+- This wiki lives on branch **`docs/wiki-and-research`**, pushed to `origin`, not yet merged
+  to `main`.
+
+> This section describes a moving target. Trust `git status` over this paragraph.
+
+## 8. Running it
+
+There is no working end-to-end run today — `DATABASE_URL` points at a dead database (§6.1), so
+`run_sql` fails and only the web-search tool works. These are the commands as the repo is
+currently wired.
+
+```bash
+# --- backend (terminal 1) ---
+cd agent
+uv sync                                   # installs from pyproject.toml / uv.lock
+uv run python test_groq.py                # sanity: Groq reachable?  (no DB needed)
+uv run python agent.py                    # runs the graph once against the __main__ prompt
+uv run python server.py                   # AG-UI endpoint on http://localhost:8123
+
+# --- frontend (terminal 2) ---
+cd frontend
+npm install                               # expect a peer-dep fight; see wiki/05 §1
+npm run dev                               # http://localhost:3000
+```
+
+Order matters: the backend must be up first, or the frontend's `/api/copilotkit` route has
+nothing to proxy to. `frontend/app/api/copilotkit/route.ts` reads `AGENT_URL`, defaulting to
+`http://localhost:8123`.
+
+`agent/.env` must contain `GROQ_API_KEY`, `TAVILY_API_KEY` and `DATABASE_URL`.
+`GROQ_MODEL` is optional and defaults to `openai/gpt-oss-120b`.
+
+> **Untested**: the frontend has never been run against the backend
+> ([07](07-roadmap.md) Phase 5 is where that first happens). Treat the two `npm` lines as
+> "what should work", not "what has been observed to work".
+
+To regenerate the dataset measurements without any database, see
+[`tools/profiling/`](../tools/profiling/) — those scripts run standalone against `Datasets/`.
+
+## 9. Version drift found in the manifest
 
 | Pin | Reality |
 |---|---|

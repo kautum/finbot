@@ -33,16 +33,25 @@ Finbot inverts it: point it at the schema and ask anything, immediately. This is
 
 > **The demo move**: ask something no one would have built a dashboard for.
 > *"Does a customer's credit score predict whether they get defrauded?"* Finbot answers in
-> seconds — **and the answer is no** (0.155% / 0.146% / 0.143% across bands,
-> [02](02-data-dictionary.md) §8). In a BI tool that question costs a modelling cycle. And a
+> seconds — **and the answer is no**: 0.155% (good) / 0.146% (fair) / 0.143% (excellent) /
+> **0.124% (poor)**, i.e. the *lowest* fraud rate sits with the weakest credit
+> ([02](02-data-dictionary.md) §8). In a BI tool that question costs a modelling cycle. And a
 > *negative* result is far more persuasive than a confirmation, because it proves the system
 > is measuring rather than agreeing.
 
 ### Wedge 2 — BI shows differences; it does not tell you if they are real
 This is the sharpest genuine gap, and it is under-exploited. Power BI, Tableau and Looker will
-happily render two bars at 0.84% and 0.03%. **None of them tells you whether the difference is
-statistically significant, or how wide the confidence interval is.** Business users read a
-3-pixel difference as a trend every day.
+happily render two bars at 0.84% and 0.03% with no statement of whether the gap is real.
+
+**Be precise about the claim.** These tools are not statistics-free: Tableau reports p-values
+and R² on trend lines, and Power BI's analytics pane offers error bars and forecast confidence
+intervals. What none of them does is **hypothesis-test two arbitrary user-named segments,
+conversationally, at question time** — "is fraud significantly higher for online than swipe?"
+is not a trend line, and there is no pane for it. The statistics that exist are attached to
+specific chart features, not available on demand for whatever comparison a user just asked for.
+
+Overstating this to "no BI tool does statistics" is the kind of claim a BI-literate listener
+catches instantly — and by §1's own logic, one caught claim takes every true claim with it.
 
 Finbot's Phase-7 tools ([07](07-roadmap.md)) return a p-value and a Wilson-score interval, and
 **refuse to test segments with too few fraud cases** — 22 of 109 MCC segments have fewer than 10
@@ -52,16 +61,29 @@ fraud cases even at full scale ([02](02-data-dictionary.md) §8).
 > dashboard on the market does. **Refusal is a feature.** It is also the single strongest
 > counter to the "isn't this just a hallucinating chatbot?" objection.
 
-### Wedge 3 — BI cannot join what does not share a key
-Finbot's data has two disconnected threads: transaction-level micro data (13.3M rows) and
-national financial-inclusion indicators (174 countries, 2011–2024). **No join key exists.** A BI
-tool needs a modelled relationship to relate two tables; with no key, there is no relationship,
-so there is no dashboard.
+### Wedge 3 — the join nobody modelled
+Finbot's data has two threads that look unrelated: transaction-level micro data (13.3M rows) and
+national financial-inclusion indicators (174 countries, 2011–2024).
 
-A reasoning agent can hold both and *reason across them in narrative* — "card-present fraud
-falls as digital-account penetration rises in this income band" — which is analysis, not a join.
-This is exactly the multi-table joint reasoning the brief asks for, and it is a shape BI
-genuinely cannot express.
+They *do* join — `transactions.merchant_state` carries full country names for non-US merchants
+and matches `findex.countrynewwb` on **104 countries** ([02](02-data-dictionary.md) §5). But it
+is a join **nobody would have modelled in advance**, because it depends on noticing that a
+column named "state" contains countries. It is not in any schema diagram. No BI semantic model
+contains it, because a human would have had to spot it and build it first.
+
+That is the real wedge — not "BI cannot join this", but **BI can only join what someone already
+modelled**. An agent that inspects the data can find the relationship at question time.
+
+> **The demo move**: *"Do merchants in countries with lower digital-account penetration see
+> different fraud rates?"* A question that requires discovering the join, spanning two datasets
+> nobody linked, answered live.
+>
+> **Two caveats the agent must state** or the number is wrong: `findex` has ~49 rows per country
+> (years × demographic groups), so aggregate before joining or the count fans out ~49×; and it
+> covers only the non-US slice, since US rows use 2-letter state codes.
+>
+> *(This wedge originally claimed no join key existed. A verification pass found one. Kept as a
+> reminder that the dataset rewards inspection over assumption — which is the argument.)*
 
 ### Wedge 4 — the dashboard is opaque; Finbot shows its work
 A dashboard number arrives with no provenance. Ask "where did that come from?" and the answer

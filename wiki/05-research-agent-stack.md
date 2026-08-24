@@ -19,7 +19,7 @@ The v2 generative-UI surface is **six primitives**:
 | A2UI | Agent emits a declarative schema, composed against a catalog you register |
 | MCP Apps | Sandboxed iframe UI shipped by an MCP server |
 
-### The exact API Finbot needs (copied from live docs)
+### The exact API Finbot needs (adapted from the live docs example)
 
 `run_sql` is a **backend** tool, so the primitive is `useRenderTool`:
 
@@ -58,8 +58,17 @@ Frontend subscribes to agent state; each backend-forwarded value re-renders the 
 Backend emits `STATE_SNAPSHOT` events from the streaming loop (or via framework middleware).
 **Caveat from the docs**: whatever is emitted mid-node is only a *prediction* — the node's
 actual returned state at the end is the source of truth and overwrites anything not included
-in the return. **Not supported on CopilotKit's Built-in Agent**, only on real framework
-integrations (LangGraph qualifies).
+in the return. The docs state this is **not supported on CopilotKit's Built-in Agent**, only on real framework
+integrations, and defer to a per-framework "framework grid".
+
+> **⚠ UNVERIFIED — verify before building Phase 6 on it.** The docs page redirected before the
+> framework grid could be read, so *"LangGraph supports state rendering"* is an inference from
+> CopilotKit shipping three LangGraph integration tracks, **not** a confirmed entry in that grid.
+> [07](07-roadmap.md) Phase 6 depends on this. Confirm at
+> `docs.copilotkit.ai/generative-ui/state-rendering` (choose the LangChain backend) before
+> committing to the design. If it turns out unsupported, the fallback is to return the
+> `reasoning_trace` as part of the final tool result and render it with `useRenderTool`, which
+> is confirmed to work.
 
 Practical pattern: keep `reasoning_trace: list[dict]` in state, append in each node, emit after
 each tool call, render in a collapsible panel.

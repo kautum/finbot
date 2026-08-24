@@ -17,8 +17,12 @@ it is *under-built*. Almost everything below deepens the existing graph rather t
 | Step | Exit condition |
 |---|---|
 | 0.1 Owner picks Option A / B / C from [03](03-infrastructure-decision.md) §8 | A decision is written down |
-| 0.2 Commit the uncommitted `run_sql` change on `main` | `git status` clean |
-| 0.3 Delete or mark `PROGRESS.md` superseded; fold plan v1/v2 into this wiki | No doc contradicts [01](01-current-state.md) |
+| 0.2 **Memory probe**: deploy a bare FastAPI + DuckDB service on the chosen host, run the six benchmark queries, report timings and peak RSS | 329 MB file demonstrably works in 512 MB RAM — **or** a fallback is chosen before anything is built on it |
+| 0.3 Commit the uncommitted `run_sql` change on `main` | `git status` clean |
+| 0.4 Mark `PROGRESS.md` and plan v1/v2 superseded (done) | No doc contradicts [01](01-current-state.md) |
+
+**0.2 is the highest-value hour in the plan.** It is the only untested assumption underneath
+everything else ([03](03-infrastructure-decision.md) §8). Do it before Phase 1.
 
 **Recommendation: Option A** — DuckDB/Parquet data layer, Python backend on Render, Next.js on
 Vercel. No quota in the system can silently kill it.
@@ -39,9 +43,18 @@ it is being touched anyway.
    - `zip` DOUBLE → INTEGER
    - **drop `card_number` and `cvv`** — synthetic, but they look exactly like real PANs/CVVs and
      must never reach a screenshot
-3. **Sort `transactions` by `date`** before writing Parquet. Row-group min/max pruning only works
-   on sorted data, and date filters are the dominant analyst query shape.
-4. Row groups ~100K–1M rows; keep zstd.
+3. **Sort `transactions` by `date`** before writing Parquet. Row-group min/max pruning degrades
+   badly on unsorted data (every group's min/max spans the whole domain, so nothing is skipped),
+   and date filters are the dominant analyst query shape. Row groups ~100K–1M rows; keep zstd.
+   *Note: this mainly pays off on the Parquet-over-HTTP path. With a local `.duckdb` file
+   (Option A) it is a minor win — do it anyway, it is free at write time.*
+4. **Normalise `merchant_state`** or add a derived `merchant_country` column. It currently mixes
+   US 2-letter codes with full country names and is 11.75% NULL
+   ([02](02-data-dictionary.md) §2) — the most dangerous trap in the dataset, because it yields
+   plausible wrong answers rather than errors.
+5. **Source a findex/databank indicator dictionary** so `fin11a` is not opaque. Small, and
+   nothing else in the plan owns it. Without it the macro tables are close to unusable by an
+   agent.
 
 **Exit condition**: a script that rebuilds the store from `Datasets/` reproducibly, plus an
 assertion check that reproduces the [02](02-data-dictionary.md) numbers exactly —
@@ -72,8 +85,28 @@ This is security work, not polish. The tool as written would execute `DROP TABLE
 
 ## PHASE 3 — Semantic layer (~1–2 days) ← **highest leverage in the whole plan**
 
-All four reference products reduce to a YAML metric registry once the enterprise serving layer
-is stripped away ([04](04-competitive-research.md) §6). Steal Databricks' Metric View shape.
+**Two halves: SQL views for correctness, YAML for vocabulary.**
+
+### 3a. Governed views — make the wrong answer impossible (~2 hours)
+Adapted from WrenAI, which does not let the LLM write SQL against physical tables at all
+([09](09-open-source-landscape.md) §3). A YAML file injected into a prompt is *advisory* — the
+model may ignore it. A view is *structural*.
+
+```sql
+CREATE VIEW v_labeled_transactions AS      -- inner join: the 33% gap can't be hit
+  SELECT t.*, f.is_fraud
+  FROM transactions t JOIN fraud_labels f ON t.id = f.transaction_id;
+
+CREATE VIEW v_spend AS                     -- excludes the 660,054 refunds
+  SELECT * FROM transactions WHERE amount > 0;
+```
+
+Point the agent at these and name them in the tool docstring. Cheapest correctness win in the
+entire plan.
+
+### 3b. YAML metric registry — vocabulary, synonyms, caveats
+All four reference products reduce to this once the enterprise serving layer is stripped away
+([04](04-competitive-research.md) §6). Steal Databricks' Metric View shape.
 
 ```yaml
 measures:
@@ -234,6 +267,9 @@ Say these on a roadmap slide; do not build them.
 
 ## Realistic total
 
-**11–15 working days** for Phases 0–9, solo, assuming the CopilotKit install fight in Phase 5
-does not spiral. Phases 3 and 6 together — roughly two days — deliver the largest share of the
-demo credibility, which is why they are not deferred.
+Summing the per-phase estimates: **10–14 working days** for Phases 0–9, solo, assuming the
+CopilotKit install fight in Phase 5 does not spiral. Phases 3 and 6 together — roughly two days —
+deliver the largest share of the demo credibility, which is why they are not deferred.
+
+Add ~1 day of slack for the Render memory probe in Phase 0 and its possible fallback
+([03](03-infrastructure-decision.md) §8), giving a realistic **11–15 days**.

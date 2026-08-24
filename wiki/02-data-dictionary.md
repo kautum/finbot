@@ -1,7 +1,9 @@
 # 02 — Data Dictionary (measured 2026-08-23)
 
-Every number below was produced by running DuckDB 1.5.5 over the raw files in `Datasets/`.
-None of it is estimated. Reproduce with the scripts described in §7.
+Every number below was measured, not estimated. Almost all come from DuckDB 1.5.5 run over the
+raw files in `Datasets/`; the exceptions are the `databank` reshape (pandas, because the source
+is `.xlsx`) and the file sizes (the filesystem). **The scripts that produced every figure on
+this page are committed at [`tools/profiling/`](../tools/profiling/)** — see §7.
 
 ## 1. Tables at a glance
 
@@ -34,7 +36,7 @@ A single consolidated `.duckdb` file containing all seven tables is **329 MB**.
 | `use_chip` | VARCHAR | 3 values |
 | `merchant_id` | BIGINT | 74,831 distinct; no merchant dimension table exists |
 | `merchant_city` | VARCHAR | |
-| `merchant_state` | VARCHAR | 199 distinct (US states + country codes for online) |
+| `merchant_state` | VARCHAR | 199 distinct. US 2-letter codes **plus full country names** (`Mexico` 27,401 · `Canada` 10,647 · `Italy` 7,081 · `United Kingdom` 4,482 · …). **11.75% NULL (1,563,700 rows).** |
 | `zip` | DOUBLE | should be INTEGER/VARCHAR |
 | `mcc` | BIGINT | -> `mcc_codes.mcc_code` |
 | `errors` | VARCHAR | NULL for 13,094,522 of 13,305,915 rows (98.4%) |
@@ -52,8 +54,13 @@ A single consolidated `.duckdb` file containing all seven tables is **329 MB**.
 ### Data-quality traps for the agent
 1. `amount` is a **string with a `$`**. Unparsed, `AVG(amount)` errors or returns garbage.
    Fix at ETL time: `TRY_CAST(replace(amount,'$','') AS DECIMAL(10,2))`.
+   Verified: **0 rows fail to parse** with this expression.
 2. Negative amounts silently distort every spend aggregate.
-3. `zip` as DOUBLE renders as `58523.0`.
+3. **`merchant_state` is 11.75% NULL and mixes two value systems** — US state codes and full
+   country names. Any `GROUP BY merchant_state` silently drops 1.56M rows and puts `CA` and
+   `Canada` in the same column. This is the most dangerous trap in the dataset because, unlike
+   the `$`-string, it produces a *plausible* wrong answer instead of an error.
+4. `zip` as DOUBLE renders as `58523.0`.
 
 ## 3. `fraud_labels` — and the rare-event problem
 
@@ -66,7 +73,10 @@ A single consolidated `.duckdb` file containing all seven tables is **329 MB**.
 - **Overall fraud rate = 0.1495%** (about 1 in 669).
 - **Coverage is partial**: only 8,914,963 of 13,305,915 transactions have a label.
   **4,390,952 transactions (33.0%) are unlabeled.**
-  Labeled rows span the full 2010–2019 range, so this is a random-ish holdout, not a time cut.
+- The labeled fraction is **67.0% in every single year**, 2010 through 2019 (66.9–67.1%).
+  That uniformity is strong evidence the holdout is a **random sample, not a time cut** —
+  so aggregate rates computed on the labeled subset generalise, and there is no need to
+  restrict analysis to a particular period.
 
 > **Critical for correctness.** Any fraud-rate metric MUST be computed over the labeled
 > subset only (`JOIN fraud_labels`), never over all transactions. A `LEFT JOIN` with
@@ -111,7 +121,8 @@ card_on_dark_web`.
 - Orphan `client_id` in transactions: **0**
 - But: only **1,219 of 2,000 users** and **4,071 of 6,146 cards** appear in transactions.
   781 users and 2,075 cards have zero activity. An "average transactions per user" metric
-  gives 6,650 or 10,915 depending on the denominator — a textbook case for the semantic layer.
+  gives **6,653** (all registered users) or **10,915** (active users only) depending on the
+  denominator — a textbook case for the semantic layer.
 
 ## 5. Macro tables (no join key to the transaction data)
 
@@ -123,14 +134,38 @@ incomegroupwb24, group, group2`, then ~430 `fin*` indicator columns.
 1,226 indicator codes, years 2011–2021. Columns: `countrynewwb, codewb, year,
 regionwb21_hi, incomegroupwb21, pop_adult, indicator_code, value`.
 
-> These two share no key with the transaction tables. They are a **second, parallel
-> analytical thread** (national financial-inclusion trends), not a dimension to join.
-> The agent must be told this explicitly or it will hallucinate a join. There is also no
-> indicator-code dictionary — `fin11a` is opaque. Sourcing one is a small, high-value task.
+### There IS a usable join — and it is the most interesting thing in the dataset
+
+`transactions.merchant_state` contains **full country names** for non-US merchants, and those
+match `findex.countrynewwb` exactly. **104 distinct countries join.** Verified:
+
+```sql
+SELECT count(DISTINCT t.merchant_state)
+FROM transactions t JOIN findex fx ON t.merchant_state = fx.countrynewwb;  -- 104
+```
+
+This links micro-level card behaviour to national financial-inclusion indicators — a genuinely
+cross-domain analysis, and the single most distinctive thing this dataset supports.
+
+> **Two cautions before using it.**
+> 1. `findex` holds **~49 rows per country** (multiple years × demographic groups), so a naive
+>    join fans out ~49×. Aggregate transactions **first**, then join — or filter findex to one
+>    `year` and `group`. Quote country counts, not joined row counts.
+> 2. It covers only the non-US slice. The US majority uses 2-letter state codes and will not
+>    match. Say so when reporting.
+>
+> The agent must be told both, or it will produce a confidently inflated number.
+
+There is no indicator-code dictionary — `fin11a` is opaque. Sourcing one is a small,
+high-value task; see [07](07-roadmap.md) Phase 1.
 
 ## 6. Query performance — measured on the 329 MB DuckDB file
 
-Local, laptop, single-threaded cold connection, full 22.5M rows:
+Conditions, stated precisely: **local laptop (multi-core, DuckDB's default thread count), one
+read-only connection reused across all six queries, against a file written seconds earlier —
+so the OS page cache was warm.** These are best-case numbers. Treat them as an upper bound on
+what the engine can do, not as a prediction of production latency on a 0.1 CPU container.
+Full 22.5M rows:
 
 | Query | Time |
 |---|---:|
@@ -145,23 +180,50 @@ Nothing exceeded 130 ms. Scanning the raw 1.2 GB CSV to count and profile took 5
 
 ## 7. Reproducing this
 
-Scripts used live in the job scratch dir and are not committed. To regenerate:
-`duckdb` 1.5.5 + `read_csv_auto` for CSVs; for the fraud JSON you **must** pass
-`maximum_object_size=200000000` to `read_json` (the file is one 159 MB JSON object and
-DuckDB's 16 MB default rejects it), then
-`unnest(map_keys(target))` / `unnest(map_values(target))` to explode the map.
+Scripts are committed at [`tools/profiling/`](../tools/profiling/). Run in order with
+`python3`; they need `duckdb>=1.5` and `pandas`, and expect `Datasets/` at the repo root.
+
+| Script | Produces |
+|---|---|
+| `01_profile_transactions.py` | §2 — row count, date range, cardinality, amount stats |
+| `02_profile_fraud.py` | §3 — fraud counts, label coverage, fraud by year |
+| `03_to_parquet.py` | §1 — Parquet conversion and sizes |
+| `04_to_parquet_macro.py` | §1, §5 — databank reshape, total size |
+| `05_benchmark.py` | §6 — builds the `.duckdb` file, times the six queries |
+| `06_integrity.py` | §4 — join integrity, orphan checks, segment power |
+| `07_verify_claims.py` | §8 — credit bands, `merchant_state` nulls, the findex join, label uniformity |
+
+**Two gotchas that will bite anyone regenerating this:**
+1. `train_fraud_labels.json` is a single 159 MB JSON object. DuckDB's `read_json` defaults to a
+   16 MB `maximum_object_size` and rejects it. Pass `maximum_object_size=200000000`, then
+   `unnest(map_keys(target))` / `unnest(map_values(target))` to explode the map.
+2. `05_benchmark.py` originally printed only `r[:3]` per query, which silently truncated the
+   four-band credit-score result to three. **Print full result sets when the output is a
+   finding.**
 
 ## 8. Real findings already surfaced (use these in the demo)
 
 Not invented — measured:
 
-- **Online transactions are 28x more fraud-prone than swipe.**
+- **Online transactions are 28× more fraud-prone than swipe.**
   Online 0.8409% · Chip 0.0992% · Swipe 0.0295%. Large, clean, instantly legible.
 - **Highest-fraud MCCs** (min 10k txns): Passenger Railways 2.004% · Gardening Supplies
-  1.282% · Industrial Equipment 1.218% — all ~10x the 0.1495% baseline.
-- **Credit score barely predicts fraud victimhood**: good 0.155% · fair 0.146% ·
-  excellent 0.143%. A genuinely interesting negative result — good demo material because
-  it contradicts the obvious hypothesis.
+  1.282% · Industrial Equipment 1.218% — **8.1× to 13.4×** the 0.1495% baseline.
+- **Credit score does not predict fraud victimhood** — all four bands, full result:
+
+  | Band | Transactions | Fraud rate |
+  |---|---:|---:|
+  | good (700–799) | 4,778,858 | 0.155% |
+  | fair (600–699) | 2,843,966 | 0.146% |
+  | excellent (800+) | 762,930 | 0.143% |
+  | **poor (<600)** | **529,209** | **0.124%** |
+
+  The whole range is 0.124–0.155% — no meaningful spread. And the *lowest* fraud rate belongs
+  to the **poor** band, the opposite of the intuitive expectation. Strong demo material
+  precisely because it contradicts the obvious hypothesis.
+  **Report all four bands.** An earlier draft of this wiki listed only three because the
+  benchmark script truncated its output, which would have left the demo unable to answer
+  "what about sub-600?".
 
 ### Statistical-power warning
 Of 109 MCC segments, **22 already have fewer than 10 fraud cases at full scale.** Fraud is

@@ -25,6 +25,10 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 | **[06 — Memory & Knowledge Graph](06-memory-and-knowledge-graph.md)** | When memory or `build-kg` comes up. |
 | **[07 — Roadmap](07-roadmap.md)** | To know what to do next and in what order. |
 | **[08 — Positioning](08-positioning.md)** | How Finbot competes with BI tools and wins — the product argument, the demo script, and the claims never to make. |
+| **[09 — Open-Source Landscape](09-open-source-landscape.md)** | What to steal from WrenAI/Vanna/DB-GPT, and the evidence-backed verdict on multi-agent (no). |
+| **[10 — Agent Instruction Design](10-agent-instruction-design.md)** | The system prompt, tool docstrings, and how to layer context. The agent has no prompt today. |
+| **[11 — UI Plan](11-ui-plan.md)** | CopilotKit's verified v2 API against the design system in `website-instructions.md`. |
+| **[12 — Sources](12-sources.md)** | Every URL behind the research, plus an explicit list of claims left unverified. |
 | [website-instructions.md](website-instructions.md) | Any frontend/visual design work. Pre-existing, account-wide, not Finbot-specific. |
 
 ## The five things that matter most
@@ -64,14 +68,25 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 ## Real findings already measured (use these in the demo)
 
 - **Online transactions are 28× more fraud-prone than swipe**: 0.8409% vs 0.0295% (chip 0.0992%).
-- **Highest-fraud MCCs**: Passenger Railways 2.004%, Gardening Supplies 1.282% — ~10× baseline.
-- **Credit score barely predicts fraud victimhood**: 0.155% / 0.146% / 0.143% across bands. A
-  genuinely interesting negative result, because it contradicts the obvious hypothesis.
+- **Highest-fraud MCCs**: Passenger Railways 2.004%, Gardening Supplies 1.282% — 8.1×–13.4× baseline.
+- **Credit score does not predict fraud victimhood**: good 0.155% / fair 0.146% /
+  excellent 0.143% / **poor 0.124%** — the lowest rate sits with the weakest credit. A genuinely
+  interesting negative result, because it contradicts the obvious hypothesis.
+- **A join nobody would have modelled**: `transactions.merchant_state` holds full country names
+  for non-US merchants and matches `findex.countrynewwb` on **104 countries** — linking card
+  behaviour to national financial-inclusion data.
 
 ## Conventions
 
 - Numbered pages, `NN-topic.md`, cross-linked relatively.
-- Every quantitative claim is measured or sourced. Unverified things are labelled unverified.
+- Every quantitative claim is either **measured** (scripts committed at
+  [`tools/profiling/`](../tools/profiling/), which regenerate every figure in
+  [02](02-data-dictionary.md)) or **sourced** (URLs in [12](12-sources.md)).
+  Claims that are neither are explicitly labelled unverified — [12](12-sources.md) lists them
+  all in one place.
+- This wiki has been through one adversarial verification pass, which found seven blocking
+  defects, all since fixed. Where a correction changed a conclusion, the page says so rather
+  than quietly overwriting it.
 - When this wiki and an older planning doc disagree, **the wiki wins** —
   `PROGRESS.md`, `finbot-project-plan.md` and `finbot-project-plan-v2.md` are superseded and
   retained only as history.
