@@ -1,0 +1,78 @@
+# Governed metric definitions. The agent must prefer these over inventing its own SQL.
+# Keep this small and internally consistent -- Hex's published post-mortem describes
+# contradictory definitions sending an agent into 30 minutes of self-second-guessing.
+
+measures:
+  - name: fraud_rate
+    synonyms: ["fraud %", "fraud percentage", "how much fraud", "fraud level"]
+    expr: "100.0 * SUM(is_fraud::INT) / COUNT(*)"
+    source: v_transactions
+    unit: percent
+    caveat: >
+      Computed only over the 8,914,963 labeled transactions. A further 4,390,952
+      transactions have no fraud label at all -- including them understates the rate
+      by about 33%. v_transactions already excludes them; never re-add them.
+
+  - name: fraud_count
+    synonyms: ["number of frauds", "fraud cases"]
+    expr: "SUM(is_fraud::INT)"
+    source: v_transactions
+    unit: count
+
+  - name: total_spend
+    synonyms: ["spending", "revenue", "volume", "how much was spent"]
+    expr: "SUM(amount)"
+    source: v_spend
+    unit: usd
+    caveat: >
+      v_spend excludes 660,054 refunds carried as negative amounts. Use v_transactions
+      instead only when the question is explicitly about refunds or net flow.
+
+  - name: avg_transaction_value
+    synonyms: ["average spend", "basket size", "average ticket"]
+    expr: "AVG(amount)"
+    source: v_spend
+    unit: usd
+
+  - name: transaction_count
+    synonyms: ["how many transactions", "volume of transactions"]
+    expr: "COUNT(*)"
+    source: v_transactions
+    unit: count
+
+  - name: fraud_loss
+    synonyms: ["money lost to fraud", "fraud value", "fraud exposure"]
+    expr: "SUM(CASE WHEN is_fraud THEN amount ELSE 0 END)"
+    source: v_spend
+    unit: usd
+
+dimensions:
+  - name: channel
+    description: >
+      How the card was presented. Derived at load time from merchant_state, which
+      mixes US state codes, foreign country names, and NULL for online -- the single
+      most dangerous trap in this dataset. Always use `channel`, never merchant_state,
+      to talk about online vs in-person.
+    values: ["Online", "In-person (domestic)", "In-person (foreign)"]
+
+  - name: mcc_description
+    description: Merchant category, e.g. "Grocery Stores". 109 distinct values.
+
+  - name: card_brand
+    description: Visa, Mastercard, Amex, Discover.
+
+  - name: use_chip
+    description: "Chip Transaction / Swipe Transaction / Online Transaction."
+
+  - name: merchant_country
+    description: >
+      "United States" for domestic, real country name for foreign, NULL for online.
+      Joins to v_findex.countrynewwb for World Bank financial-inclusion indicators.
+
+  - name: date
+    description: TIMESTAMP, 2010-01-01 to 2019-10-31. Use date_trunc for period grouping.
+
+statistical_guardrail: >
+  Fraud is a rare event -- 13,332 cases in 8.9M rows, 0.1495%. Do not compare or rank
+  segments with fewer than 30 fraud cases; say the sample is too small instead. 22 of
+  the 109 merchant categories have fewer than 10 fraud cases even at full scale.

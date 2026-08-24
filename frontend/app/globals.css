@@ -1,26 +1,126 @@
-@import "tailwindcss";
+/* Finbot design tokens.
+   Palette derived from the Linear system in wiki/website-instructions.md §4:
+   hierarchy comes from a stepped surface ladder, not drop shadows, and the accent is
+   never decorative -- it belongs to the data, the focus ring, and nothing else. */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+
+  --bg: #010102;
+  --surface-1: #0f1011;
+  --surface-2: #141516;
+  --surface-3: #18191a;
+  --line: #232425;
+  --line-soft: #1b1c1d;
+
+  --ink: #f4f4f6;
+  --ink-dim: #9b9ba1;
+  --ink-faint: #6a6a70;
+
+  --accent: #5e6ad2;
+  --accent-ink: #a5adf0;
+
+  /* Data colours. These exist only inside charts. */
+  --data-1: #5e6ad2;
+  --data-2: #4cb782;
+  --data-3: #d4a04c;
+  --data-4: #c25f6b;
+
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Any number the user might compare against another number. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ---- CopilotKit v2 theme -------------------------------------------------
+   v2 ships a Tailwind stylesheet using shadcn token names, themed by a `.dark`
+   class on <html>. Rather than fighting its classes, its tokens are remapped
+   onto the surface ladder above so the chat inherits the same palette. */
+
+.dark {
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface-1);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-2);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--bg);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-dim);
+  --accent: var(--surface-3);
+  --accent-foreground: var(--ink);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--accent);
+}
+
+/* Chat prose. Numbers get tabular figures wherever they appear. */
+.copilotkit-assistant-message,
+[data-copilotkit-assistant-message] {
+  font-size: 14.5px;
+  line-height: 1.62;
+}
+
+.copilotkit-assistant-message table,
+[data-copilotkit-assistant-message] table {
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  margin: 10px 0;
+}
+
+.copilotkit-assistant-message th,
+.copilotkit-assistant-message td,
+[data-copilotkit-assistant-message] th,
+[data-copilotkit-assistant-message] td {
+  border: 1px solid var(--line);
+  padding: 5px 10px;
+  text-align: left;
+}
+
+.copilotkit-assistant-message code,
+[data-copilotkit-assistant-message] code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
 }

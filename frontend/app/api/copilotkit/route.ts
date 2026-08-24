@@ -16,6 +16,9 @@ const runtime = new CopilotRuntime({
 
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
+// Note: the v2 client also probes GET /api/copilotkit/info, which 404s here because this
+// route has no catch-all segment. Agent discovery still succeeds over POST, so it is only
+// console noise -- fix with an [[...rest]] route if it ever matters.
 export const POST = async (req: NextRequest) => {
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
     runtime,

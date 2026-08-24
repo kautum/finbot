@@ -8,3 +8,10 @@ __pycache__/
 .next/
 Datasets/
 agent/.agents/
+.serena/
+
+# Built by tools/etl/build_fact.py from Datasets/. 292 MB, regenerate rather than commit.
+data/
+# LangGraph conversation checkpoints, local to each machine.
+*.duckdb
+finbot_checkpoints.db*
