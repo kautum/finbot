@@ -15,6 +15,10 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 
 ## Read in this order
 
+> **[14 — Working style](14-working-style.md) FIRST, before your first reply.** Short answers,
+> conversation not reports, plain language, one next step at a time. Long finished write-ups
+> in chat do not work for this owner. Detail belongs in the wiki; chat is for talking.
+
 | Page | Read it when |
 |---|---|
 | **[01 — Current State](01-current-state.md)** | Always. What actually exists, verified against the working tree, plus four errors in the older planning docs. |
