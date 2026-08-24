@@ -59,16 +59,25 @@ Backend emits `STATE_SNAPSHOT` events from the streaming loop (or via framework 
 **Caveat from the docs**: whatever is emitted mid-node is only a *prediction* — the node's
 actual returned state at the end is the source of truth and overwrites anything not included
 in the return. The docs state this is **not supported on CopilotKit's Built-in Agent**, only on real framework
-integrations, and defer to a per-framework "framework grid".
+integrations.
 
-> **⚠ UNVERIFIED — verify before building Phase 6 on it.** The docs page redirected before the
-> framework grid could be read, so *"LangGraph supports state rendering"* is an inference from
-> CopilotKit shipping three LangGraph integration tracks, **not** a confirmed entry in that grid.
-> [07](07-roadmap.md) Phase 6 depends on this. Confirm at
-> `docs.copilotkit.ai/generative-ui/state-rendering` (choose the LangChain backend) before
-> committing to the design. If it turns out unsupported, the fallback is to return the
-> `reasoning_trace` as part of the final tool result and render it with `useRenderTool`, which
-> is confirmed to work.
+> **✅ VERIFIED SUPPORTED ON LANGGRAPH — Phase 6 is unblocked.** An earlier draft of this page
+> flagged this as unverified and [07](07-roadmap.md) Phase 6 carried a fallback plan. **That
+> hedge was wrong.** The dedicated page exists at
+> `docs.copilotkit.ai/langgraph-python/generative-ui/state-rendering` (read in-browser) with a
+> complete Python + React example: `CopilotKitMiddleware` and `StateStreamingMiddleware` on the
+> backend, and on the frontend:
+>
+> ```tsx
+> const { agent } = useAgent({
+>   agentId: "shared-state-streaming",
+>   updates: [UseAgentUpdate.OnStateChanged, UseAgentUpdate.OnRunStatusChanged],
+> });
+> ```
+>
+> Note the current hook is **`useAgent`** — not the v1-era `useCoAgentStateRender` still cited
+> in older write-ups. The backend can stream a tool argument token-by-token straight into a
+> state key, which is exactly what a live reasoning trace needs.
 
 Practical pattern: keep `reasoning_trace: list[dict]` in state, append in each node, emit after
 each tool call, render in a collapsible panel.
@@ -109,14 +118,22 @@ From `console.groq.com/docs/rate-limits`, Free plan:
 | `openai/gpt-oss-20b` | 30 | 1,000 | 8,000 | 200,000 |
 | `llama-3.3-70b-versatile` | — | — | — | **DEPRECATED ~2026-06-17** |
 
-### The arithmetic
-Budget ~1,800 tokens per LLM call once SQL results are in context (a 20-row result table alone
-is several hundred tokens), 8 calls per multi-step question → **~14,400 tokens/question**.
+### The arithmetic — MEASURED, not estimated ([13](13-experiments.md) E9)
 
-- **TPD 200,000** → ~**13–14 full questions/day**. Genuinely exhaustible in one demo session.
-- **RPD 1,000** → ~125 questions/day. Not the binding constraint.
-- **TPM 8,000** → **a single question doing 8 rapid round-trips can blow the per-minute cap
-  within one user turn.** This is the most likely demo-day failure: a 429 mid-answer.
+An earlier draft estimated ~14,400 tokens/question. **The measured average is 6,242** across
+three questions of rising difficulty (2–6 LLM calls, 1–5 SQL queries each).
+
+- **TPD 200,000** → **~32 questions/day** at the average; **~16/day** if every question is a
+  hard multi-step one (the hardest measured 12,559 tokens over 6 LLM calls).
+- **RPD 1,000** → not the binding constraint.
+- **TPM 8,000** → still the sharpest edge: **the hardest question consumed 12,559 tokens, and if
+  its 6 calls land inside one minute it exceeds the per-minute cap mid-answer.** This remains
+  the most likely demo-day failure.
+
+> **These limits are per-model, not per-account.** `openai/gpt-oss-120b` gets 200,000 TPD;
+> other Groq models differ substantially (some smaller Llama models allow far more). Changing
+> `GROQ_MODEL` changes the ceiling. Groq also cut free daily request limits during 2026, so
+> treat these numbers as volatile and re-check them.
 
 **Behaviour on breach is a 429 rate-limit, not account disablement** — unlike the CockroachDB
 incident, Groq degrades rather than bans. But a silent 429 mid-answer looks broken to a

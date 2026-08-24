@@ -226,8 +226,15 @@ Not invented — measured:
 - **Online transactions are 28× more fraud-prone than swipe.**
   Online 0.8409% · Chip 0.0992% · Swipe 0.0295%. Statistically confirmed: **z = 177.9, p ≈ 0**,
   Online 95% CI [0.8236%, 0.8586%] vs Swipe [0.0280%, 0.0311%] — non-overlapping.
-- **Highest-fraud MCCs** (min 10k txns): Passenger Railways 2.004% · Gardening Supplies
-  1.282% · Industrial Equipment 1.218% — **8.1× to 13.4×** the 0.1495% baseline.
+- **Highest-fraud merchant categories** (≥30 fraud cases, **grouped by `mcc` code**):
+  Cruise Lines **59.78%** (165/276) · Music Stores **37.25%** (76/204) ·
+  Computers & Peripherals **10.83%** · Electronics Stores **8.57%** ·
+  Precious Stones and Metals **6.87%**. Up to **400× baseline**.
+
+  > **Trap: `mcc_description` is not unique.** "Passenger Railways" covers two codes — 3722
+  > (10,414 txns, 1.45%) and 4112 (1,463 txns, 5.95%) — which grouping by description blends
+  > into a misleading 2.004%. An earlier version of this page reported that blended figure as a
+  > headline finding. **Always group by `mcc`.** ([13](13-experiments.md) E10)
 - **Credit score does not predict fraud victimhood** — all four bands, full result:
 
   | Band | Transactions | Fraud rate |

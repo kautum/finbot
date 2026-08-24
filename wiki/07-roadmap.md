@@ -179,11 +179,26 @@ clarifying question, not a guess.
 
 ## PHASE 5 — Wire the frontend (~2–3 days)
 
-The scaffold has **never been run against the backend**. Expect an install fight first —
-CopilotKit has known ESM/CJS and peer-dependency issues on React 19; budget for
-`--legacy-peer-deps`.
+**Partly done already.** [13](13-experiments.md) E11 took the full path end-to-end:
+Next.js → CopilotKit → AG-UI → FastAPI → LangGraph → Groq → DuckDB, rendering a correct
+answer in the chat. `npm install` and `npm run build` both succeeded cleanly —
+**the predicted peer-dependency fight did not materialise.**
 
-1. End-to-end plain chat first. Nothing else until a message round-trips.
+> **⚠ Three integration bugs must be fixed first, all of which appear in the browser only as
+> the word "terminated":**
+> 1. **A checkpointer is mandatory** — AG-UI calls `graph.aget_state()`; `.compile()` without
+>    one raises `ValueError: No checkpointer set`. **This makes Phase 8 a prerequisite of
+>    Phase 5, not a later step.**
+> 2. **Sync `SqliteSaver` fails** — AG-UI is async; it raises `NotImplementedError`.
+> 3. **`AsyncSqliteSaver` can't be built at module scope** — needs a running event loop.
+>
+> The working pattern is in `tools/experiments/e11_server.py`: build everything inside an async
+> `main()` with `AsyncSqliteSaver.from_conn_string()` as a context manager, and serve uvicorn
+> from within it. Copy it.
+
+Also: set `COPILOTKIT_TELEMETRY_DISABLED=true` — the runtime enables anonymous telemetry by default.
+
+1. End-to-end plain chat first. Nothing else until a message round-trips. **(Done in E11.)**
 2. **Decide v1 vs v2 API before writing any UI code** ([05](05-research-agent-stack.md) §1).
    Recommend **v2** — the docs already steer away from `useCopilotAction`.
 3. Chart rendering via `useRenderTool` from `@copilotkit/react-core/v2`, `name` matching the
@@ -230,9 +245,14 @@ and a confidence interval, not just two percentages. The real answer is dramatic
 
 ---
 
-## PHASE 8 — Memory (~half a day)
+## PHASE 8 — Memory (~half a day) — *the checkpointer half moves to Phase 5*
 
-1. `MemorySaver` → `SqliteSaver`. One line. Fixes state loss on restart.
+> **Re-sequenced by experiment.** Checkpointing is not an optional memory upgrade — the AG-UI
+> adapter refuses to run without it ([13](13-experiments.md) E11). Do step 1 as part of Phase 5.
+> Step 2 stays here.
+
+1. `MemorySaver` → **`AsyncSqliteSaver`** (not the sync `SqliteSaver`, which AG-UI rejects).
+   Fixes state loss on restart **and** unblocks the frontend.
 2. An `agent_memory(scope, key, value, updated_at)` table with one explicit "remember this" tool.
    Not a memory framework — see [06](06-memory-and-knowledge-graph.md) §5.
 

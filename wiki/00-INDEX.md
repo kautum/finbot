@@ -29,7 +29,7 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 | **[10 — Agent Instruction Design](10-agent-instruction-design.md)** | The system prompt, tool docstrings, and how to layer context. The agent has no prompt today. |
 | **[11 — UI Plan](11-ui-plan.md)** | CopilotKit's verified v2 API against the design system in `website-instructions.md`. |
 | **[12 — Sources](12-sources.md)** | Every URL behind the research, plus an explicit list of claims left unverified. |
-| **[13 — Experiments](13-experiments.md)** | **Seven experiments that validated the plan and changed three decisions.** Read alongside 03 and 07. |
+| **[13 — Experiments](13-experiments.md)** | **Eleven experiments that validated the plan and changed nine decisions.** Read alongside 03 and 07. |
 | [website-instructions.md](website-instructions.md) | Any frontend/visual design work. Pre-existing, account-wide, not Finbot-specific. |
 
 ## The five things that matter most
@@ -49,6 +49,8 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 4. **The agent is under-built, not wrong.** 65 lines: one ReAct loop, no system prompt, no plan,
    no trace, no semantic layer, no read-only enforcement. Julius AI proves single-agent chat is
    a viable shape. Deepen it, don't replace it.
+   **The full stack has now been proven end-to-end** ([13](13-experiments.md) E11) — Next.js →
+   CopilotKit → AG-UI → LangGraph → Groq → DuckDB, answering correctly in the chat.
 
 5. **The highest-leverage work is the YAML metric registry plus the reasoning-trace panel,
    shipped together** — roughly two days for the largest share of demo credibility. The trace
