@@ -95,7 +95,8 @@ export default function Home() {
       style={{
         height: "100dvh",
         display: "grid",
-        gridTemplateRows: "auto 1fr",
+        // One `auto` per banner: the chat pane must keep the 1fr or it collapses.
+        gridTemplateRows: overview?.snapshot ? "auto auto 1fr" : "auto 1fr",
         background: "var(--bg)",
       }}
     >
@@ -149,6 +150,27 @@ export default function Home() {
         </button>
         <ThemeToggle />
       </header>
+
+      {/* The catalogue below is real and measured, but with no agent reachable the chat
+          cannot answer. Saying so up front beats letting someone discover it by typing. */}
+      {overview?.snapshot && (
+        <div
+          role="status"
+          style={{
+            padding: "8px 20px",
+            borderBottom: "1px solid var(--line)",
+            background: "var(--warn-wash, rgba(180, 83, 9, 0.08))",
+            color: "var(--ink-dim)",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong style={{ color: "var(--ink)", fontWeight: 600 }}>Read-only preview.</strong>{" "}
+          The analyst backend is not connected, so questions cannot be answered here. The
+          dataset figures below are real, measured from all{" "}
+          {fmt(overview.stats.labeled_transactions)} labelled transactions.
+        </div>
+      )}
 
       <div
         style={{

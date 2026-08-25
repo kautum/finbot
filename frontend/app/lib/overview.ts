@@ -21,6 +21,9 @@ export type Overview = {
   field_groups: { group: string; fields: { name: string; description: string }[] }[];
   question_groups: { group: string; blurb: string; questions: string[] }[];
   caveat: string;
+  // Set when the figures came from the committed snapshot because no agent was reachable,
+  // which also means the chat cannot answer. See app/api/overview/route.ts.
+  snapshot?: boolean;
 };
 
 export function useOverview() {

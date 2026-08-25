@@ -1,0 +1,162 @@
+{
+  "stats": {
+    "labeled_transactions": 8914963,
+    "fraud_cases": 13332,
+    "fraud_rate_pct": 0.1495,
+    "cardholders": 1219,
+    "cards": 4070,
+    "merchants": 66537,
+    "categories": 108,
+    "countries": 148,
+    "first_date": "2010-01-01 00:01:00",
+    "last_date": "2019-10-31 23:57:00",
+    "total_transactions": 13305915,
+    "unlabeled_transactions": 4390952,
+    "channels": [
+      {
+        "name": "In-person (foreign)",
+        "transactions": 59512,
+        "fraud_rate_pct": 5.577
+      },
+      {
+        "name": "Online",
+        "transactions": 1047865,
+        "fraud_rate_pct": 0.8378
+      },
+      {
+        "name": "In-person (domestic)",
+        "transactions": 7807586,
+        "fraud_rate_pct": 0.0158
+      }
+    ]
+  },
+  "field_groups": [
+    {
+      "group": "Transaction",
+      "fields": [
+        {
+          "name": "date",
+          "description": "When it happened, to the minute"
+        },
+        {
+          "name": "amount",
+          "description": "Value in USD. Negative means a refund"
+        },
+        {
+          "name": "channel",
+          "description": "Online, in-person domestic, or in-person foreign"
+        },
+        {
+          "name": "use_chip",
+          "description": "Chip, swipe, or online"
+        },
+        {
+          "name": "is_fraud",
+          "description": "Whether it was confirmed fraudulent"
+        },
+        {
+          "name": "errors",
+          "description": "What went wrong, if anything, at the terminal"
+        }
+      ]
+    },
+    {
+      "group": "Merchant",
+      "fields": [
+        {
+          "name": "mcc_description",
+          "description": "Category, e.g. Grocery Stores"
+        },
+        {
+          "name": "merchant_city",
+          "description": "City the merchant is in"
+        },
+        {
+          "name": "merchant_country",
+          "description": "Country, or blank for online"
+        },
+        {
+          "name": "merchant_id",
+          "description": "Anonymous merchant identifier"
+        }
+      ]
+    },
+    {
+      "group": "Card",
+      "fields": [
+        {
+          "name": "card_brand",
+          "description": "Visa, Mastercard, Amex, Discover"
+        },
+        {
+          "name": "card_type",
+          "description": "Credit, debit, or prepaid"
+        },
+        {
+          "name": "credit_limit",
+          "description": "The card's limit in USD"
+        }
+      ]
+    },
+    {
+      "group": "Cardholder",
+      "fields": [
+        {
+          "name": "current_age",
+          "description": "Age in years"
+        },
+        {
+          "name": "gender",
+          "description": "Reported gender"
+        },
+        {
+          "name": "credit_score",
+          "description": "Credit score, roughly 480-850"
+        },
+        {
+          "name": "yearly_income",
+          "description": "Annual income in USD"
+        }
+      ]
+    }
+  ],
+  "question_groups": [
+    {
+      "group": "Fraud",
+      "blurb": "Where losses concentrate, and whether the pattern is real",
+      "questions": [
+        "Which merchant categories have the worst fraud rates?",
+        "Is online fraud significantly higher than in-person?",
+        "How did fraud change year over year?"
+      ]
+    },
+    {
+      "group": "Spending",
+      "blurb": "Volume, value, and how they move over time",
+      "questions": [
+        "How has total spending changed year over year?",
+        "What are the biggest merchant categories by spend?",
+        "What does an average transaction look like by card brand?"
+      ]
+    },
+    {
+      "group": "Customers",
+      "blurb": "Who spends, who gets targeted, and how they differ",
+      "questions": [
+        "Does credit score predict being defrauded?",
+        "How does spending vary by age group?",
+        "Do higher-income cardholders use different card types?"
+      ]
+    },
+    {
+      "group": "Deep dives",
+      "blurb": "The questions a dashboard cannot answer",
+      "questions": [
+        "Which country has the strangest fraud pattern, and when did it start?",
+        "Are chip transactions actually safer than swipe?",
+        "Which merchant categories are too small to draw conclusions from?"
+      ]
+    }
+  ],
+  "caveat": "Fraud figures cover the 8,914,963 transactions that carry a fraud label. A further 4,390,952 have no label and are excluded, because counting them would understate every fraud rate by about a third."
+}
