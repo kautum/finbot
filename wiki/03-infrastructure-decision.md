@@ -304,8 +304,27 @@ matches the pre-joined design this section required, so functionally the hard re
 - **Blocked on:** the owner creating a Render account (GitHub OAuth) and pasting in 4 secrets
   (`GROQ_API_KEY`, `GROQ_MODEL`, `TAVILY_API_KEY` — values already known, sitting in
   `agent/.env`; `GH_TOKEN` — a new fine-grained PAT scoped to `kautum/finbot`, Contents:
-  Read-only, since the repo is private). No tool/MCP/API access to Render exists in this
-  environment, so this step cannot be done by an agent.
+  Read-only, since the repo is private).
+- **Render MCP is now configured** (2026-08-25) but **not yet authenticated**. Added at user
+  scope as an HTTP server pointing at `https://mcp.render.com/mcp` — the hosted endpoint,
+  verified live (401 + `WWW-Authenticate: Bearer`, OAuth metadata at
+  `/.well-known/oauth-protected-resource/mcp`). It does **not** load in an already-running
+  session; restart Claude Code, then `/mcp` → `render` → authenticate to run the browser OAuth
+  flow. That flow is also what creates/links the Render account.
+- **Three things an agent still cannot do**, even with the MCP connected:
+  1. **The OAuth browser flow** — account creation and consent are human-only.
+  2. **Minting the `GH_TOKEN`** — GitHub exposes no API for creating personal access tokens,
+     fine-grained or classic. It must be made at
+     `github.com/settings/personal-access-tokens` (repo `kautum/finbot`, Contents: Read-only).
+     *Alternative that removes this secret entirely:* publish the 279 MB `finbot.duckdb` as a
+     release asset on a separate **public** repo and drop the auth header from `render.yaml`.
+     The data is synthetic, so this is viable — but it is a publishing decision, so ask first.
+  3. **Installing the Render GitHub App** on the private `kautum/finbot` repo, which Render
+     needs before it can build from it.
+- **Blueprint caveat:** the Render MCP server has no "deploy this `render.yaml`" tool. It
+  exposes `create_web_service` with individual parameters, so the agent path is to replicate
+  `render.yaml`'s `buildCommand` / `startCommand` / `envVars` through that tool (or use the
+  REST API with an API key). `render.yaml` stays the source of truth either way.
 - **Once the owner has the `*.onrender.com` URL:** set it as `AGENT_URL` on the Vercel
   frontend project (`vercel env add AGENT_URL production`, run from `frontend/` with the
   authenticated CLI), redeploy, and confirm the "Read-only preview" banner disappears and
