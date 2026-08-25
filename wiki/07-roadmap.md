@@ -368,16 +368,55 @@ Say these on a roadmap slide; do not build them.
   governed definition to cite.
 - **9 last**: deploying before the answers are trustworthy just publishes the problem.
 
-## What's left, in priority order (2026-08-25)
+## Architect review (2026-08-25b) — gaps found reading the actual code, not the docs
 
-1. **Phase 7 — wire the statistics layer.** The math is done and verified; only the tool
-   registration, prompt update, and `StatCard` UI remain. Highest leverage per hour of any
-   remaining item — the 353× channel gap becomes a p-value-and-CI demo instead of two numbers.
-2. **Phase 9a — land one working Vercel deploy** under a fresh project name, to have a real
+- **`compare_two_rates` / `rate_interval` / `compare_many_rates` are now registered as
+  `@tool`s in `agent.py`** — verified: imported without touching the LLM, all 5 tools present
+  in both `tools` and the post-budget rebind list, a real call on the online-vs-domestic
+  counts returns correct JSON, and a deliberately bad call (`compare_many_rates` with 2
+  groups) returns a clean `"ERROR: ..."` string instead of crashing. System prompt and UI
+  still don't know about them — that's the next step, below.
+- **Tavily is a dead dependency, not a missing one.** `langchain-tavily` and
+  `TAVILY_API_KEY` exist, but nothing in `agent.py`/`server.py`/`db.py`/`catalog.py` imports
+  or calls it — it was in the pre-rebuild scaffold and got dropped silently. **Owner decision:
+  wire it back in** as a tool for questions the database can't answer (general definitions,
+  MCC-code meaning, macro context) — never for transaction/fraud figures, which the database
+  is always authoritative for. Needs a system-prompt line saying exactly that boundary.
+- **`pandas`, `psycopg2-binary`, `sqlalchemy`, `sqlalchemy-cockroachdb` are dead
+  dependencies from the abandoned Neon/CockroachDB attempts**, imported nowhere. This isn't
+  cosmetic: [03](03-infrastructure-decision.md) states keeping `pandas` (43 MB) out of the
+  Render runtime image as a hard requirement against the 512 MB ceiling — it is currently
+  violating its own deploy plan. Strip these before Phase 9b, not during it.
+- **`agent/test_neon.py` smoke-tests a database that is no longer part of the
+  architecture** (the dead Neon project). Actively misleading, not just stale — delete or
+  clearly mark historical.
+- **No retry/backoff exists around the Groq calls today.** `wiki/07` already named this as
+  mandatory before Phase 9b opens the demo to strangers; there is zero code for it yet. Build
+  it as its own step, not folded silently into the deploy step.
+- **Test coverage is two self-checks** (`db.py`, `statistics.py`), nothing for `agent.py`'s
+  own logic (query-budget counting, tool rebinding) or the frontend. Reasonable for a demo at
+  this size, but worth naming rather than leaving implicit.
+
+## What's left, in priority order (revised 2026-08-25b)
+
+1. **Wire Tavily back in** as a tool in `agent.py` (owner decision above), with an explicit
+   system-prompt boundary: use it only for context the database cannot supply, never for a
+   transaction/fraud number. Add it to the tools list AND to the post-budget rebind — the
+   rebind exists to stop runaway SQL loops, so it should still gate `run_sql`, not an
+   unrelated web lookup the model might still legitimately need to finish answering.
+2. **Finish Phase 7**: extend the system prompt to cover the stats tools + Tavily, then build
+   `StatCard.tsx` + its `useRenderTool` registration. Highest leverage per hour of anything
+   remaining — the 353× channel gap becomes a p-value-and-CI demo instead of two numbers.
+3. **Dependency + dead-code cleanup**: drop `pandas`, `psycopg2-binary`, `sqlalchemy`,
+   `sqlalchemy-cockroachdb` from `pyproject.toml`; remove `agent/test_neon.py`. Mechanical,
+   zero behavior change, unblocks Phase 9b's own stated memory budget.
+4. **Groq retry/backoff wrapper**, before Phase 9b — exponential backoff plus a visible
+   "rate limited, retrying" UI state, per the existing Phase 9 guidance.
+5. **Phase 9a — land one working Vercel deploy** under a fresh project name, to have a real
    link to share (snapshot-backed, chat still offline).
-3. **Phase 9b — owner decides backend hosting**, then build the one artifact that decision
+6. **Phase 9b — owner decides backend hosting**, then build the one artifact that decision
    requires (Dockerfile for Option A, or the JS rewrite for Option B) and wire `AGENT_URL`.
-4. Everything else — mobile layout, a dedicated reasoning-trace panel (CopilotKit's built-in
+7. Everything else — mobile layout, a dedicated reasoning-trace panel (CopilotKit's built-in
    "Thought for N seconds" already covers most of this for free), the `agent_memory` table —
    is polish, not a blocker to a working public demo.
 
