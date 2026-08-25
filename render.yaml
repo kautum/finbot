@@ -5,9 +5,11 @@ services:
     plan: free
     buildCommand: >
       mkdir -p data &&
-      curl -L -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream"
+      curl -fSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream"
       https://api.github.com/repos/kautum/finbot/releases/assets/529666335
       -o data/finbot.duckdb &&
+      head -c 32 data/finbot.duckdb | grep -aq DUCK &&
+      ls -l data/finbot.duckdb &&
       pip install uv &&
       cd agent && uv sync
     startCommand: cd agent && uv run python server.py
