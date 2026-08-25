@@ -1,7 +1,14 @@
-# 01 — Current State (verified 2026-08-23)
+# 01 — Current State (verified 2026-08-23, §2/§4/§5/§7/§8 corrected 2026-08-25)
 
 Everything here was read from the working tree or executed, not inferred from prior planning docs.
 Where a planning doc disagrees with this file, **this file wins** — see §6.
+
+> **2026-08-25 correction**: §2, §4, §5, §7 and §8 below describe the pre-build state and are
+> now wrong in the specifics — the agent, safety layer, semantic layer, and full frontend all
+> shipped since this page was written (commits `b0890c2`, `8e47475`, `8fed013`). Kept as
+> historical record of the starting point; **read [16](16-ui-build.md) and
+> [07](07-roadmap.md) for what actually exists now.** The dataset facts in §6 are unaffected
+> and still hold.
 
 ## 1. Repository layout
 

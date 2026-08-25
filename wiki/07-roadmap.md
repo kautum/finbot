@@ -10,7 +10,23 @@ it is *under-built*. Almost everything below deepens the existing graph rather t
 
 ---
 
-## PHASE 0 — Unblock (BLOCKED ON OWNER)
+## Status snapshot (updated 2026-08-25, verified against the working tree)
+
+**Phases 0–6 are done and running locally.** `git log` shows three feature commits
+(`b0890c2`, `8e47475`, `8fed013`) that shipped the pre-joined DuckDB store, governed views,
+driver-level read-only, the query budget, the semantic layer, charts, the SQL trace, and the
+discovery UI. `agent/agent.py` has a real system prompt, two tools (`run_sql`, `chart`), and
+the budget-rebind guard — none of that existed when this roadmap was first written. Phase 8
+step 1 (checkpointer) is also done: `agent/server.py` builds an `AsyncSqliteSaver` correctly.
+Everything below this line is what is **actually still open**, in order.
+
+**Phases 0–6 bodies below are kept as historical record** — the safety patterns, view
+definitions and gotchas they document are still exactly what shipped. Skip to
+[Phase 7](#phase-7--statistics--ab-testing-built-not-wired) for the real remaining work.
+
+---
+
+## PHASE 0 — Unblock (BLOCKED ON OWNER) — ✅ DONE (resolved as Option A, local DuckDB)
 
 **Nothing else can start.** The repo currently cannot reach a database with data in it.
 
@@ -27,7 +43,7 @@ Vercel. No quota in the system can silently kill it.
 
 ---
 
-## PHASE 1 — Data layer, rebuilt properly (~1 day)
+## PHASE 1 — Data layer, rebuilt properly (~1 day) — ✅ DONE (`data/finbot.duckdb`, 279 MB)
 
 Rewrite the ETL. The current `load_to_neon.py` carries four correctness bugs worth fixing while
 it is being touched anyway.
@@ -67,7 +83,7 @@ assertion check that reproduces the [02](02-data-dictionary.md) numbers exactly 
 
 ---
 
-## PHASE 2 — Make `run_sql` safe and dialect-correct (~half a day)
+## PHASE 2 — Make `run_sql` safe and dialect-correct (~half a day) — ✅ DONE (`agent/db.py`)
 
 This is security work, not polish. The tool as written would execute `DROP TABLE`.
 
@@ -100,7 +116,7 @@ All of this is **verified working** in `tools/experiments/e5_safety.py` — copy
 
 ---
 
-## PHASE 3 — Semantic layer (~1–2 days) ← **highest leverage in the whole plan**
+## PHASE 3 — Semantic layer (~1–2 days) — ✅ DONE (`agent/metrics.yaml`, governed views in `db.py`)
 
 **Two halves: SQL views for correctness, YAML for vocabulary.**
 
@@ -155,7 +171,7 @@ three produce identical SQL. That is the entire point — and it is the demo mom
 
 ---
 
-## PHASE 4 — Multi-step reasoning (~2–3 days)
+## PHASE 4 — Multi-step reasoning (~2–3 days) — ⚠️ PARTIAL (budget guard done; no explicit plan/reflect nodes)
 
 Replace the trivial ReAct loop with PLAN → EXECUTE → REFLECT.
 
@@ -177,7 +193,7 @@ clarifying question, not a guess.
 
 ---
 
-## PHASE 5 — Wire the frontend (~2–3 days)
+## PHASE 5 — Wire the frontend (~2–3 days) — ✅ DONE ([16](16-ui-build.md))
 
 **Partly done already.** [13](13-experiments.md) E11 took the full path end-to-end:
 Next.js → CopilotKit → AG-UI → FastAPI → LangGraph → Groq → DuckDB, rendering a correct
@@ -210,7 +226,7 @@ chat, not a markdown table.
 
 ---
 
-## PHASE 6 — Reasoning-trace panel (~1–2 days)
+## PHASE 6 — Reasoning-trace panel (~1–2 days) — ⚠️ PARTIAL (SqlCard shows queries; no dedicated trace panel — see [16](16-ui-build.md) §6)
 
 Genie's "Thinking steps", which both Databricks and Hex ship as a headline feature.
 
@@ -227,53 +243,103 @@ Phase 3 exists to enable.
 
 ---
 
-## PHASE 7 — Statistics / A/B testing (~1 day)
+## PHASE 7 — Statistics / A/B testing (BUILT, NOT WIRED) — the next thing to build
 
-**Do not add a Python sandbox.** `langchain-experimental` is archived (2026-05-26); E2B is
-disproportionate infrastructure for closed-form tests.
+**The math is done.** `agent/statistics.py` (27 KB) implements `compare_two_rates`,
+`rate_interval`, `compare_many_rates` — Wilson score intervals, pooled/unpooled z-tests,
+Fisher's exact fallback, Benjamini–Hochberg correction, the Cohen's-h rare-event fix — and
+passes its full oracle suite verified against `scipy`/`statsmodels`/hand arithmetic. Full
+design rationale in [15](15-statistics.md). **None of it is reachable from the chat yet.**
 
-Three parameterised tools taking only aggregate counts `run_sql` already returned:
-`two_proportion_ztest`, `chi_square_independence`, `proportion_confidence_interval`
-(implementations in [05](05-research-agent-stack.md) §5). No raw rows cross the tool boundary.
+Concrete steps, in order:
+
+1. **Register the three functions as `@tool` in `agent/agent.py`.** They are plain functions
+   today, not LangChain tools — wrap each with `@tool` and a docstring the model can act on
+   (signatures: `compare_two_rates(label_a, successes_a, trials_a, label_b, successes_b,
+   trials_b, confidence=0.95)`, `rate_interval(label, successes, trials, confidence=0.95)`,
+   `compare_many_rates(labels, successes_list, trials_list, ...)`). Add them to the `tools`
+   list at `agent.py:135` alongside `run_sql` and `chart`.
+2. **Add them to the over-budget rebind at `agent.py:167`.** Today that line does
+   `llm.bind_tools([chart])` once the 4-query budget is spent — change it to
+   `llm.bind_tools([chart, compare_two_rates, rate_interval, compare_many_rates])`. Without
+   this, a test becomes unreachable at exactly the point the model has the counts it needs to
+   run one.
+3. **Extend the system prompt** (`agent.py` `SYSTEM_PROMPT`): call a stats tool whenever the
+   user asks whether a difference is real, significant, or meaningful — and never assert
+   significance without having run one. Point at the same rare-event refusal rule already in
+   the prompt (≥30 events) so the model doesn't test segments the stats layer will refuse anyway.
+4. **Build a `StatCard.tsx`** in `frontend/app/components/`, and a matching `useRenderTool`
+   registration in `page.tsx` (zod schema mirroring the three tool signatures, `name` matching
+   exactly — same pattern as `SqlCard`/`ChartCard`). Render order, per [15](15-statistics.md)
+   §6: the verdict sentence first, then rates with CI error bars, then p-value/effect size as
+   secondary detail.
+5. Update this roadmap's status line once shipped (do not leave a second stale "done" claim).
 
 **Exit condition**: "is online fraud significantly higher than swipe fraud?" returns a p-value
-and a confidence interval, not just two percentages. The real answer is dramatic — 0.8409% vs
-0.0295% — so this is a strong demo.
+and a confidence interval in a rendered card, not just two percentages. The real answer is
+dramatic — 0.8378% vs 0.0158%, 353× — so this is the strongest demo moment available.
 
-**Guardrail**: the agent must refuse to test segments with too few fraud cases.
-22 of 109 MCC segments already have <10 fraud cases at full scale.
-
----
-
-## PHASE 8 — Memory (~half a day) — *the checkpointer half moves to Phase 5*
-
-> **Re-sequenced by experiment.** Checkpointing is not an optional memory upgrade — the AG-UI
-> adapter refuses to run without it ([13](13-experiments.md) E11). Do step 1 as part of Phase 5.
-> Step 2 stays here.
-
-1. `MemorySaver` → **`AsyncSqliteSaver`** (not the sync `SqliteSaver`, which AG-UI rejects).
-   Fixes state loss on restart **and** unblocks the frontend.
-2. An `agent_memory(scope, key, value, updated_at)` table with one explicit "remember this" tool.
-   Not a memory framework — see [06](06-memory-and-knowledge-graph.md) §5.
-
-**Exit condition**: correct a metric definition, restart the server, and the correction survives.
+**Guardrail already built into `statistics.py`**: refuses to test segments with too few
+events rather than returning a number it can't justify — see [15](15-statistics.md) §4.
 
 ---
 
-## PHASE 9 — Deploy (~1 day)
+## PHASE 8 — Memory (~half a day) — ⚠️ PARTIAL
 
-Backend to Render (or per the Phase-0 decision), frontend to Vercel, `AGENT_URL` wired.
-Mitigate the 15-min spin-down with a loading state or a GitHub Actions cron ping.
+1. `MemorySaver` → **`AsyncSqliteSaver`** — ✅ DONE. `agent/server.py` builds it correctly
+   inside async `main()`, exactly per the E11 pattern. State survives a restart.
+2. An `agent_memory(scope, key, value, updated_at)` table with one explicit "remember this"
+   tool — **not built.** Low priority: nothing in the current demo script needs a correction
+   to persist across a restart. Defer unless the owner hits this in practice.
 
-**Groq quota is the real demo risk** and needs handling here, not later: TPD 200,000 ≈ **13–14
-multi-step questions/day**, and TPM 8,000 can be blown *inside a single turn* by a fast
-multi-tool loop. Mandatory: exponential backoff, a visible "rate limited, retrying" state, and —
-cheapest and most effective — **do not feed 200 raw rows back into context**; feed aggregates
-and a truncated preview. Keep a no-card fallback provider configured (Cerebras has 1M tokens/day,
-5× Groq's budget).
+**Exit condition** (for step 2, if ever picked up): correct a metric definition, restart the
+server, and the correction survives.
 
-**Exit condition**: a public URL a stranger can use, and a rate-limit that degrades visibly
-rather than looking broken.
+---
+
+## PHASE 9 — Deploy (~1 day estimated; currently BLOCKED, in progress)
+
+Two separate deployments, and both are open right now.
+
+### 9a. Frontend → Vercel — blocked on a platform permission wall
+The connected Vercel token can create a brand-new project's first deployment, but 403s on
+any second touch to that same project — including projects created earlier in this same
+session (`finbot`, `finbot-analyst` both failed on redeploy). Every retry needs a **fresh,
+never-before-touched project name**.
+
+Steps:
+1. Deploy under an unused project name (e.g. `finbot-demo`).
+2. Verify by fetching the live URL directly — deployment status can't be queried through the
+   API once the 403 wall is hit, so the URL fetch *is* the verification.
+3. Understand what this ships even when it works: `frontend/app/api/overview/route.ts` falls
+   back to the committed `overview-snapshot.json` when no backend is reachable, so the page
+   shows real measured dataset stats — but the chat cannot answer anything, and the UI says so
+   (`snapshot: true` banner in `page.tsx`). This is a legitimate intermediate milestone, not
+   the finished product.
+
+### 9b. Backend hosting — decision still owed by the owner ([03](03-infrastructure-decision.md) §8)
+Nothing here has been built yet — no `Dockerfile`, no `render.yaml`. Once the owner picks:
+
+- **Option A (recommended)**: Render free web service, the 279 MB `data/finbot.duckdb`
+  bundled into the container image, `AGENT_URL` in Vercel pointed at the Render URL. Measured
+  ~410 MB RSS / 153 ms worst query for the pre-joined layout — fits Render's 512 MB free tier.
+  Mitigate the 15-min spin-down with a loading state or a GitHub Actions cron ping.
+- **Option B**: rewrite the agent in LangGraph.js, run in-process in the same Vercel
+  deployment as the frontend. No second host, but loses Python's `scipy`/`statsmodels` — would
+  need to re-derive Phase 7's math in JS, which nothing has scoped yet.
+- **Option C (rejected)**: MotherDuck — reintroduces exactly the "account can be suspended for
+  any reason" quota risk that killed Neon and CockroachDB twice already.
+
+**Groq quota is the real demo risk once this is public**, and must be handled at this step,
+not after: TPD 200,000 ≈ **13–14 multi-step questions/day**, and TPM 8,000 can be blown
+*inside a single turn* by a fast multi-tool loop. Mandatory before opening this to strangers:
+exponential backoff, a visible "rate limited, retrying" state, and — cheapest and most
+effective, already partly done in `run_sql` — never feed raw rows back into context, only
+aggregates and a truncated preview. Keep a no-card fallback provider configured (Cerebras has
+1M tokens/day, 5× Groq's budget).
+
+**Exit condition**: a public URL a stranger can use for real chat (not the snapshot fallback),
+and a rate-limit that degrades visibly rather than looking broken.
 
 ---
 
@@ -302,7 +368,26 @@ Say these on a roadmap slide; do not build them.
   governed definition to cite.
 - **9 last**: deploying before the answers are trustworthy just publishes the problem.
 
-## Realistic total
+## What's left, in priority order (2026-08-25)
+
+1. **Phase 7 — wire the statistics layer.** The math is done and verified; only the tool
+   registration, prompt update, and `StatCard` UI remain. Highest leverage per hour of any
+   remaining item — the 353× channel gap becomes a p-value-and-CI demo instead of two numbers.
+2. **Phase 9a — land one working Vercel deploy** under a fresh project name, to have a real
+   link to share (snapshot-backed, chat still offline).
+3. **Phase 9b — owner decides backend hosting**, then build the one artifact that decision
+   requires (Dockerfile for Option A, or the JS rewrite for Option B) and wire `AGENT_URL`.
+4. Everything else — mobile layout, a dedicated reasoning-trace panel (CopilotKit's built-in
+   "Thought for N seconds" already covers most of this for free), the `agent_memory` table —
+   is polish, not a blocker to a working public demo.
+
+## Realistic total (superseded — kept for history)
+
+The original estimate below assumed a fully cold start; Phases 0–6 turned out to take about
+that long and are now done. Remaining work (Phase 7 wiring + Phase 9 deploy) is realistically
+**1–2 more days**, dominated by whichever backend-hosting option the owner picks in 9b.
+
+<details><summary>Original estimate, written before Phase 0</summary>
 
 Summing the per-phase estimates: **10–14 working days** for Phases 0–9, solo, assuming the
 CopilotKit install fight in Phase 5 does not spiral. Phases 3 and 6 together — roughly two days —
@@ -310,3 +395,5 @@ deliver the largest share of the demo credibility, which is why they are not def
 
 Add ~1 day of slack for the Render memory probe in Phase 0 and its possible fallback
 ([03](03-infrastructure-decision.md) §8), giving a realistic **11–15 days**.
+
+</details>
