@@ -87,6 +87,11 @@ llm = ChatGroq(
     model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
     api_key=os.getenv("GROQ_API_KEY"),
     temperature=0,
+    # ChatGroq already retries with exponential backoff (langchain_core's default
+    # retry decorator) on rate limits and 5xx -- just raising the ceiling and capping
+    # the per-call wait so a stuck request fails instead of hanging the request.
+    max_retries=4,
+    request_timeout=45,
 )
 
 _con = db.connect()
