@@ -11,6 +11,7 @@ import {
 } from "@copilotkit/react-core/v2";
 import { ChartCard } from "./components/ChartCard";
 import { SqlCard } from "./components/SqlCard";
+import { StatCard } from "./components/StatCard";
 import { DataPanel } from "./components/DataPanel";
 import { Starters } from "./components/Starters";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -27,6 +28,30 @@ const chartParams = z.object({
   x_key: z.string(),
   y_keys: z.array(z.string()),
   data: z.array(z.record(z.string(), z.union([z.string(), z.number()]))),
+});
+
+const compareTwoRatesParams = z.object({
+  label_a: z.string(),
+  successes_a: z.number(),
+  trials_a: z.number(),
+  label_b: z.string(),
+  successes_b: z.number(),
+  trials_b: z.number(),
+  confidence: z.number().optional(),
+});
+
+const rateIntervalParams = z.object({
+  label: z.string(),
+  successes: z.number(),
+  trials: z.number(),
+  confidence: z.number().optional(),
+});
+
+const compareManyRatesParams = z.object({
+  labels: z.array(z.string()),
+  successes: z.array(z.number()),
+  trials: z.array(z.number()),
+  confidence: z.number().optional(),
 });
 
 export default function Home() {
@@ -77,6 +102,27 @@ export default function Home() {
       ) : (
         <></>
       ),
+  });
+
+  useRenderTool({
+    name: "compare_two_rates",
+    agentId: AGENT_ID,
+    parameters: compareTwoRatesParams,
+    render: (props) => <StatCard result={"result" in props ? props.result : undefined} />,
+  });
+
+  useRenderTool({
+    name: "rate_interval",
+    agentId: AGENT_ID,
+    parameters: rateIntervalParams,
+    render: (props) => <StatCard result={"result" in props ? props.result : undefined} />,
+  });
+
+  useRenderTool({
+    name: "compare_many_rates",
+    agentId: AGENT_ID,
+    parameters: compareManyRatesParams,
+    render: (props) => <StatCard result={"result" in props ? props.result : undefined} />,
   });
 
   const ask = useCallback(

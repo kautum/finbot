@@ -7,10 +7,12 @@ from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage
 from langchain_groq import ChatGroq
+from langchain_tavily import TavilySearch
 from langgraph.graph import StateGraph, MessagesState, START
 from langgraph.prebuilt import ToolNode, tools_condition
 
 import db
+import statistics as stats
 
 HERE = Path(__file__).parent
 load_dotenv(HERE / ".env")
@@ -72,6 +74,13 @@ from raw columns but say explicitly that you used an ad-hoc definition.
   offer a coarser cut that would work. Do not keep querying to find a way around it.
 - Correlation is not cause. Say "associated with", not "causes", unless you tested it.
 - Round percentages sensibly. Fraud rates need 3-4 decimal places to be meaningful.
+- `tavily_search` is for context the database cannot supply -- what an MCC code means in
+  general, background on a company or event, macro news. Never use it for a transaction,
+  spend, or fraud number; the database is always authoritative for those, even if a web
+  result disagrees with it.
+- When asked whether a difference is real, significant, or meaningful, call a statistics
+  tool (`compare_two_rates`, `rate_interval`, `compare_many_rates`) and report both the
+  p-value and the effect size. Never assert significance from eyeballing two percentages.
 """
 
 llm = ChatGroq(
@@ -81,6 +90,7 @@ llm = ChatGroq(
 )
 
 _con = db.connect()
+web_search = TavilySearch(max_results=3)
 
 
 @tool
@@ -122,6 +132,55 @@ def chart(kind: str, title: str, x_key: str, y_keys: list[str], data: list[dict]
     return f"Chart rendered: {title} ({kind}, {len(data)} points)."
 
 
+@tool
+def compare_two_rates(
+    label_a: str, successes_a: int, trials_a: int,
+    label_b: str, successes_b: int, trials_b: int,
+    confidence: float = 0.95,
+) -> str:
+    """Test whether two rates differ, and by how much. Use this whenever asked if a
+    difference is real, significant, or meaningful -- never claim significance without it.
+
+    Pass raw counts (successes and trials), not percentages. Returns whether the gap is
+    statistically real (p-value) AND whether it is large enough to matter (risk ratio with
+    confidence interval, Cohen's h) -- these are separate questions, and at millions of rows
+    almost anything is "significant" without being important.
+    """
+    try:
+        return json.dumps(stats.compare_two_rates(
+            label_a, successes_a, trials_a, label_b, successes_b, trials_b, confidence
+        ))
+    except stats.StatsError as e:
+        return f"ERROR: {e}"
+
+
+@tool
+def rate_interval(label: str, successes: int, trials: int, confidence: float = 0.95) -> str:
+    """Confidence interval for a single rate -- how precisely it is known from this many
+    events. Use this for "how confident are we in X%" questions, and for segments too small
+    to compare against another group.
+    """
+    try:
+        return json.dumps(stats.rate_interval(label, successes, trials, confidence))
+    except stats.StatsError as e:
+        return f"ERROR: {e}"
+
+
+@tool
+def compare_many_rates(
+    labels: list[str], successes: list[int], trials: list[int], confidence: float = 0.95
+) -> str:
+    """Test whether a rate differs across three or more groups (e.g. across merchant
+    categories or years). Corrects for multiple comparisons -- testing many groups without
+    this correction manufactures false "findings" by chance. Needs at least 3 groups; use
+    compare_two_rates for 2.
+    """
+    try:
+        return json.dumps(stats.compare_many_rates(labels, successes, trials, confidence))
+    except stats.StatsError as e:
+        return f"ERROR: {e}"
+
+
 def _jsonable(v):
     from decimal import Decimal
     from datetime import date, datetime
@@ -132,7 +191,8 @@ def _jsonable(v):
     return v
 
 
-tools = [run_sql, chart]
+stats_tools = [compare_two_rates, rate_interval, compare_many_rates]
+tools = [run_sql, chart, web_search] + stats_tools
 llm_with_tools = llm.bind_tools(tools)
 
 
@@ -162,9 +222,10 @@ def call_model(state: MessagesState):
             f"You have used your {QUERY_BUDGET}-query budget. Do not call run_sql again. "
             "Answer now from the results you already have. If they are not sufficient to "
             "answer safely, say so plainly and explain what you would need. You may still "
-            "call `chart` once."
+            "call `chart`, `tavily_search`, or a statistics tool if you already have the "
+            "counts it needs."
         )))
-        return {"messages": [llm.bind_tools([chart]).invoke(messages)]}
+        return {"messages": [llm.bind_tools([chart, web_search] + stats_tools).invoke(messages)]}
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
