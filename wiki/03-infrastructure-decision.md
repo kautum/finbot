@@ -1,8 +1,13 @@
-# 03 — Infrastructure Decision (research complete, AWAITING OWNER SIGN-OFF)
+# 03 — Infrastructure Decision (DECIDED — Option A, deployment in progress)
 
-> **STATUS: DECISION NOT MADE. Do not touch `load_to_neon.py` or `agent/.env` until the owner
-> picks a path.** Two provider switches have already caused significant rework. A third blind
-> switch is the specific thing this document exists to prevent.
+> **STATUS: Option A chosen and being executed (2026-08-25).** Frontend is live. Backend
+> deployment is prepped and waiting on one manual step from the owner (Render signup — no API
+> access to Render exists in any session, so this cannot be automated). See **§9** for exact
+> current state and the next action.
+
+> Historical note: `load_to_neon.py` and the stale `DATABASE_URL` in `agent/.env` are still
+> untouched dead weight from the superseded Neon attempt — harmless (unused) but not yet
+> deleted. Safe to remove once the owner confirms.
 
 ## 1. The constraint set
 
@@ -271,3 +276,40 @@ Vercel                   Next.js + CopilotKit
 
 New accounts required: **one** (Render). Data-layer quotas: **none**.
 Measured: ~410 MB RSS, 153 ms worst query.
+
+## 9. Current deployment status (as of 2026-08-25)
+
+**Frontend — live.** `frontend/` deployed to Vercel via the authenticated `vercel` CLI (the
+Vercel MCP plugin's token cannot deploy or even list this account's projects — 403 on
+`deploy_to_vercel`, empty `list_projects`; use the CLI directly for anything Vercel-related).
+Public URL: **https://finbot-ten.vercel.app** — project `finbot`. It correctly falls back to
+`overview-snapshot.json` and shows a "Read-only preview" banner when no backend is reachable
+([16](16-ui-build.md) covers this fallback design).
+
+**Backend — prepped, not yet deployed.** Exactly the Option A shape above, minus the ETL
+rename (item 6.1 is still pending; `data/finbot.duckdb`'s `fact.fact_transactions` table already
+matches the pre-joined design this section required, so functionally the hard requirement from
+§8's risk box is already met):
+
+- `data/finbot.duckdb` (292,564,992 bytes) uploaded as a GitHub Release asset:
+  release tag `data-v1` on `kautum/finbot` (repo is **private**, so fetching the asset needs
+  an authenticated request — see `render.yaml`). Asset id `529666335`.
+- `render.yaml` committed at repo root (branch `docs/wiki-and-research`) — a Render Blueprint
+  that: `curl`s the release asset into `data/` using a `GH_TOKEN` secret, `pip install uv`,
+  `cd agent && uv sync`, then `cd agent && uv run python server.py`. No changes were needed to
+  `agent/server.py` — it already reads `PORT` from env and blocks in `uvicorn.Server().serve()`,
+  which is exactly Render's expected shape (a real persistent process, not a per-request
+  function — this is *why* Render and not Vercel serverless, see the chat explanation this
+  page's decision already predicted in §4B).
+- **Blocked on:** the owner creating a Render account (GitHub OAuth) and pasting in 4 secrets
+  (`GROQ_API_KEY`, `GROQ_MODEL`, `TAVILY_API_KEY` — values already known, sitting in
+  `agent/.env`; `GH_TOKEN` — a new fine-grained PAT scoped to `kautum/finbot`, Contents:
+  Read-only, since the repo is private). No tool/MCP/API access to Render exists in this
+  environment, so this step cannot be done by an agent.
+- **Once the owner has the `*.onrender.com` URL:** set it as `AGENT_URL` on the Vercel
+  frontend project (`vercel env add AGENT_URL production`, run from `frontend/` with the
+  authenticated CLI), redeploy, and confirm the "Read-only preview" banner disappears and
+  `useAgent`/`CopilotChat` get real answers end-to-end.
+
+**Not yet done:** deleting `load_to_neon.py` and the stale `DATABASE_URL` (item 6.1–6.2 above)
+— still there, still unused, owner has not yet confirmed the cleanup.

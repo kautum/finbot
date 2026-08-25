@@ -49,17 +49,23 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
    `data/finbot.duckdb` (292 MB) from `Datasets/`, and the agent queries it read-only. No
    hosted provider is involved and none is needed locally. `agent/.env` still holds a stale
    `DATABASE_URL` pointing at the dead Neon project — it is unused and should be removed.
-   **Hosting the backend is still open** ([03](03-infrastructure-decision.md)).
+   **Backend hosting is decided (Option A) and in progress**, not just "open" anymore — frontend
+   is live, backend is one owner action away from live. Full current status: [03 §9](03-infrastructure-decision.md#9-current-deployment-status-as-of-2026-08-25).
 
 3. **Fraud is 0.1495%** — 13,332 cases in 8,914,963 labeled rows. And **33% of transactions have
    no fraud label at all**. Any fraud metric computed over all transactions is wrong by ~33%.
    This single fact drives the semantic layer, the sampling verdict, and the stats guardrails.
 
-4. **The agent is built and answering.** Next.js → CopilotKit → AG-UI → LangGraph → Groq →
-   DuckDB, end to end, with a system prompt, a YAML metric registry, governed views,
-   driver-level read-only, a structurally enforced query budget, inline charts and a visible
-   SQL trace. Still single-agent, which the research supports ([09](09-open-source-landscape.md)).
-   What is missing: stats wiring ([15](15-statistics.md) §6) and deployment.
+4. **The agent is built and answering — locally.** Next.js → CopilotKit → AG-UI → LangGraph →
+   Groq → DuckDB, end to end, with a system prompt, a YAML metric registry, governed views,
+   driver-level read-only, a structurally enforced query budget, inline charts, stats tools
+   (`compare_two_rates`/`rate_interval`/`compare_many_rates`, [15](15-statistics.md)) with
+   `StatCard` UI wiring, and a visible SQL trace. Still single-agent, which the research
+   supports ([09](09-open-source-landscape.md)). What is missing now is purely **deployment
+   plumbing**, not features: frontend is live at https://finbot-ten.vercel.app (currently
+   "Read-only preview" — no backend reachable yet); backend is prepped on Render
+   (`render.yaml` + a GitHub Release for the 279 MB dataset) and waiting on the owner's
+   one-time Render signup. Details: [03 §9](03-infrastructure-decision.md#9-current-deployment-status-as-of-2026-08-25).
 
 5. **Cohen's h is unusable on this data and would have produced a confidently wrong
    headline.** It scores the 53× online-vs-in-person fraud gap as "negligible", because the
