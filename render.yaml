@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: finbot-backend
+    runtime: python
+    plan: free
+    buildCommand: >
+      mkdir -p data &&
+      curl -L -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream"
+      https://api.github.com/repos/kautum/finbot/releases/assets/529666335
+      -o data/finbot.duckdb &&
+      pip install uv &&
+      cd agent && uv sync
+    startCommand: cd agent && uv run python server.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: GH_TOKEN
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: TAVILY_API_KEY
+        sync: false
+    healthCheckPath: /health
