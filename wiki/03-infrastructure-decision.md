@@ -286,10 +286,17 @@ Public URL: **https://finbot-ten.vercel.app** — project `finbot`. It correctly
 `overview-snapshot.json` and shows a "Read-only preview" banner when no backend is reachable
 ([16](16-ui-build.md) covers this fallback design).
 
-**Backend — prepped, not yet deployed.** Exactly the Option A shape above, minus the ETL
-rename (item 6.1 is still pending; `data/finbot.duckdb`'s `fact.fact_transactions` table already
-matches the pre-joined design this section required, so functionally the hard requirement from
-§8's risk box is already met):
+**Backend — live.** **https://finbot-backend-yl6k.onrender.com** (Render service
+`srv-da6vjf26iojc73fvdu1g`, free plan, oregon, autoDeploy on push to `docs/wiki-and-research`).
+`/health` → `{"ok":true}`; `/overview` serves the real measured catalogue. Verified end to end
+through the live site on 2026-08-25: *"Which channel has the highest fraud rate?"* →
+*"In-person (foreign), 5.58%"*, with a SQL tool call and a full reasoning trace, `RUN_FINISHED`,
+no errors. The "Read-only preview" banner is gone — `/api/overview` no longer returns the
+`snapshot: true` flag the banner keys off.
+
+Exactly the Option A shape above, minus the ETL rename (item 6.1 is still pending;
+`data/finbot.duckdb`'s `fact.fact_transactions` table already matches the pre-joined design this
+section required, so functionally the hard requirement from §8's risk box is already met):
 
 - `data/finbot.duckdb` (292,564,992 bytes) uploaded as a GitHub Release asset:
   release tag `data-v1` on `kautum/finbot` (repo is **private**, so fetching the asset needs
@@ -301,34 +308,48 @@ matches the pre-joined design this section required, so functionally the hard re
   which is exactly Render's expected shape (a real persistent process, not a per-request
   function — this is *why* Render and not Vercel serverless, see the chat explanation this
   page's decision already predicted in §4B).
-- **Blocked on:** the owner creating a Render account (GitHub OAuth) and pasting in 4 secrets
-  (`GROQ_API_KEY`, `GROQ_MODEL`, `TAVILY_API_KEY` — values already known, sitting in
-  `agent/.env`; `GH_TOKEN` — a new fine-grained PAT scoped to `kautum/finbot`, Contents:
-  Read-only, since the repo is private).
-- **Render MCP is now configured** (2026-08-25) but **not yet authenticated**. Added at user
-  scope as an HTTP server pointing at `https://mcp.render.com/mcp` — the hosted endpoint,
-  verified live (401 + `WWW-Authenticate: Bearer`, OAuth metadata at
-  `/.well-known/oauth-protected-resource/mcp`). It does **not** load in an already-running
-  session; restart Claude Code, then `/mcp` → `render` → authenticate to run the browser OAuth
-  flow. That flow is also what creates/links the Render account.
-- **Three things an agent still cannot do**, even with the MCP connected:
-  1. **The OAuth browser flow** — account creation and consent are human-only.
-  2. **Minting the `GH_TOKEN`** — GitHub exposes no API for creating personal access tokens,
-     fine-grained or classic. It must be made at
-     `github.com/settings/personal-access-tokens` (repo `kautum/finbot`, Contents: Read-only).
-     *Alternative that removes this secret entirely:* publish the 279 MB `finbot.duckdb` as a
-     release asset on a separate **public** repo and drop the auth header from `render.yaml`.
-     The data is synthetic, so this is viable — but it is a publishing decision, so ask first.
-  3. **Installing the Render GitHub App** on the private `kautum/finbot` repo, which Render
-     needs before it can build from it.
-- **Blueprint caveat:** the Render MCP server has no "deploy this `render.yaml`" tool. It
-  exposes `create_web_service` with individual parameters, so the agent path is to replicate
-  `render.yaml`'s `buildCommand` / `startCommand` / `envVars` through that tool (or use the
-  REST API with an API key). `render.yaml` stays the source of truth either way.
-- **Once the owner has the `*.onrender.com` URL:** set it as `AGENT_URL` on the Vercel
-  frontend project (`vercel env add AGENT_URL production`, run from `frontend/` with the
-  authenticated CLI), redeploy, and confirm the "Read-only preview" banner disappears and
-  `useAgent`/`CopilotChat` get real answers end-to-end.
+- All 4 secrets (`GROQ_API_KEY`, `GROQ_MODEL`, `TAVILY_API_KEY`, `GH_TOKEN`) are set on the
+  service. `GH_TOKEN` is a fine-grained PAT scoped to `kautum/finbot`, Contents: Read-only.
+- **The Render REST API was the working path, not the MCP.** `https://mcp.render.com/mcp` is
+  configured at user scope but never authenticated — it needs a browser OAuth flow and does not
+  load into an already-running session. `api.render.com/v1` with an API key needs neither, works
+  mid-session, and did the whole job: create service, `PUT .../env-vars/KEY`, `POST .../deploys`.
+  Reach for the API first. (The MCP also has no "deploy this `render.yaml`" tool — only
+  `create_web_service` with individual params, so the Blueprint would have to be hand-replicated.)
+- **Minting the `GH_TOKEN` is the one step no agent can do.** GitHub exposes no API for creating
+  personal access tokens. It must be made by hand at `github.com/settings/personal-access-tokens`.
+  *The trap:* the "Repository access" default is **Public repositories**, and `kautum/finbot` is
+  private — a token left on that default returns **404, not 403**, on both the repo and the asset,
+  which reads like "wrong URL" rather than "wrong scope". Two tokens were burned on this. Always
+  test a new token with `GET /repos/kautum/finbot` before pasting it anywhere.
+  *Alternative that removes the secret entirely:* publish `finbot.duckdb` on a separate **public**
+  repo and drop the auth header. The data is synthetic, so this is viable — but it is a publishing
+  decision, so ask first.
+
+### Two bugs this deploy surfaced
+
+1. **`curl` without `-f` is a silent-failure trust boundary.** Three deploys "built successfully"
+   and then died at runtime with `IO Error: ... not a valid DuckDB database file!`. Cause: the
+   unauthenticated fetch wrote GitHub's 139-byte JSON *error body* into `data/finbot.duckdb` and
+   exited 0. The build was green; the corruption only surfaced at `ATTACH`. Fixed in `render.yaml`
+   with `curl -fSL` plus a magic-byte assertion — `head -c 32 data/finbot.duckdb | grep -aq DUCK`.
+   The next failure then took 20 seconds and named itself: `curl: (22) ... error: 404`.
+   **A downloader that can write a wrong file and return success is exactly the shape the
+   root `CLAUDE.md` says must fail loudly.**
+
+2. **There are three Vercel projects, and only one is live.** `vercel project ls` shows
+   `frontend`, `finbot`, and `finbot-analyst`. **`finbot-ten.vercel.app` is served by project
+   `finbot`** — but `frontend/.vercel/project.json` links the local directory to project
+   `frontend`, so `vercel env add` run from `frontend/` silently targets the *wrong* project and
+   the live site never changes. Confirm with `vercel inspect finbot-ten.vercel.app` (it prints the
+   owning project), and relink with `vercel link --project finbot` before touching env vars.
+   `frontend` and `finbot-analyst` are stale duplicates — safe to delete, but nobody has confirmed.
+
+**Known limitation — cold starts.** Render's free plan suspends the service after ~15 minutes of
+inactivity. The first request after that pays a cold start *plus* attaching a 292 MB database, so
+it can take up to a minute and the Vercel route may fall back to the snapshot banner in the
+meantime. Warm the URL a minute before any demo. The fix is a paid plan, which the zero-billing
+constraint rules out for now.
 
 **Not yet done:** deleting `load_to_neon.py` and the stale `DATABASE_URL` (item 6.1–6.2 above)
 — still there, still unused, owner has not yet confirmed the cleanup.
