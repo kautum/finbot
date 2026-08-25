@@ -13,11 +13,7 @@ dependencies = [
     "langgraph>=1.2.11",
     "langgraph-checkpoint-sqlite>=3.1.1",
     "openpyxl>=3.1.5",
-    "pandas>=3.0.5",
-    "psycopg2-binary>=2.9.12",
     "python-dotenv>=1.2.3",
-    "sqlalchemy>=2.0.52",
-    "sqlalchemy-cockroachdb>=2.0.4",
     "statsmodels>=0.14.6",
     "uvicorn[standard]>=0.52.4",
 ]
