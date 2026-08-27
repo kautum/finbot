@@ -286,13 +286,21 @@ Public URL: **https://finbot-ten.vercel.app** — project `finbot`. It correctly
 `overview-snapshot.json` and shows a "Read-only preview" banner when no backend is reachable
 ([16](16-ui-build.md) covers this fallback design).
 
-**Backend — live.** **https://finbot-backend-yl6k.onrender.com** (Render service
-`srv-da6vjf26iojc73fvdu1g`, free plan, oregon, autoDeploy on push to `docs/wiki-and-research`).
-`/health` → `{"ok":true}`; `/overview` serves the real measured catalogue. Verified end to end
-through the live site on 2026-08-25: *"Which channel has the highest fraud rate?"* →
-*"In-person (foreign), 5.58%"*, with a SQL tool call and a full reasoning trace, `RUN_FINISHED`,
-no errors. The "Read-only preview" banner is gone — `/api/overview` no longer returns the
-`snapshot: true` flag the banner keys off.
+**Backend — deployed, but the demo does not work.** **https://finbot-backend-yl6k.onrender.com**
+(Render service `srv-da6vjf26iojc73fvdu1g`, free plan, oregon, autoDeploy on push to
+`docs/wiki-and-research`). `/health` → `{"ok":true}`; `/overview` serves the real measured
+catalogue. Verified end to end through the live site on 2026-08-25:
+*"Which channel has the highest fraud rate?"* → *"In-person (foreign), 5.58%"*, with a SQL tool
+call and a full reasoning trace, `RUN_FINISHED`, no errors. The "Read-only preview" banner is
+gone — `/api/overview` no longer returns the `snapshot: true` flag the banner keys off.
+
+> **⚠️ That verification passed and was still not enough.** Minutes later the same backend began
+> failing with `groq.APIStatusError: 413 ... TPM Limit 8000, Requested 8217`. One question costs
+> **8,491 tokens** across its three LLM calls; the free tier allows **8,000 per minute**. The
+> verification run happened to be the cheapest possible question in a fresh token window, so it
+> squeaked under. Full measurement and the ranked fix: **[17](17-rate-limit-failure.md)**.
+> The hosting decision in this page is sound — the *deploy* is finished and correct. What is not
+> finished is running a real conversation on a free model tier.
 
 Exactly the Option A shape above, minus the ETL rename (item 6.1 is still pending;
 `data/finbot.duckdb`'s `fact.fact_transactions` table already matches the pre-joined design this
@@ -346,10 +354,22 @@ section required, so functionally the hard requirement from §8's risk box is al
    `frontend` and `finbot-analyst` are stale duplicates — safe to delete, but nobody has confirmed.
 
 **Known limitation — cold starts.** Render's free plan suspends the service after ~15 minutes of
-inactivity. The first request after that pays a cold start *plus* attaching a 292 MB database, so
-it can take up to a minute and the Vercel route may fall back to the snapshot banner in the
-meantime. Warm the URL a minute before any demo. The fix is a paid plan, which the zero-billing
-constraint rules out for now.
+inactivity. The first request after that pays a cold start *plus* attaching a 292 MB database.
+**Measured 2026-08-27: `GET /health` on a sleeping service took 51.3 seconds**; warm, the same
+backend answers a full chat question in 4.3 seconds. Warm the URL a minute before any demo. The
+fix is a paid plan, which the zero-billing constraint rules out for now.
+
+**This is worse than it looks**, because `frontend/app/api/copilotkit/route.ts` sets no
+`maxDuration` and there is no `vercel.json`, so the route runs on Vercel's default 60s ceiling.
+A 51s cold start against a 60s ceiling is a race the demo will sometimes lose — and when it
+loses, the user sees a hang, which is *identical* to what the token-limit crash looks like.
+Two unrelated root causes, one symptom. See [17 §8](17-rate-limit-failure.md).
+
+**Blind spot — there are no request logs.** `agent/server.py` runs uvicorn at
+`log_level="warning"`, so nothing but an unhandled stack trace ever reaches Render's log stream.
+The entire retained log history since 2026-08-26 is four lines, all service-start notices. The
+413 was diagnosable only because it happened to be unhandled. Turn this up before the next
+incident, not after it.
 
 **Not yet done:** deleting `load_to_neon.py` and the stale `DATABASE_URL` (item 6.1–6.2 above)
 — still there, still unused, owner has not yet confirmed the cleanup.

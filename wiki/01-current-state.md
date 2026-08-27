@@ -9,6 +9,9 @@ Where a planning doc disagrees with this file, **this file wins** — see §6.
 > historical record of the starting point; **read [16](16-ui-build.md) and
 > [07](07-roadmap.md) for what actually exists now.** The dataset facts in §6 are unaffected
 > and still hold.
+>
+> **2026-08-27**: both halves are now deployed, and the live demo crashes on Groq's free-tier
+> token ceiling. Read **[17](17-rate-limit-failure.md)** before starting any work.
 
 ## 1. Repository layout
 

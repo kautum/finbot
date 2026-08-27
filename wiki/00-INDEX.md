@@ -23,7 +23,7 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 |---|---|
 | **[01 — Current State](01-current-state.md)** | Always. What actually exists, verified against the working tree, plus four errors in the older planning docs. |
 | **[02 — Data Dictionary](02-data-dictionary.md)** | Before writing any SQL or metric. Measured schema, row counts, data-quality traps, query benchmarks. |
-| **[03 — Infrastructure Decision](03-infrastructure-decision.md)** | Before choosing a host. The *data* blocker is resolved (local DuckDB); **backend hosting is still open**. |
+| **[03 — Infrastructure Decision](03-infrastructure-decision.md)** | Before touching hosting. Both halves are deployed (Vercel + Render); §9 has the live URLs, the deploy traps, and the cold-start limitation. |
 | **[04 — Competitive Research](04-competitive-research.md)** | When deciding what to build and what to skip. |
 | **[05 — Agent Stack Research](05-research-agent-stack.md)** | Before touching CopilotKit, LangGraph, Groq or the stats tools. Version-sensitive. |
 | **[06 — Memory & Knowledge Graph](06-memory-and-knowledge-graph.md)** | When memory or `build-kg` comes up. |
@@ -36,6 +36,7 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
 | **[13 — Experiments](13-experiments.md)** | **Eleven experiments that validated the plan and changed nine decisions.** Read alongside 03 and 07. |
 | **[15 — Statistics](15-statistics.md)** | Before touching `agent/statistics.py` or claiming anything about significance. Contains the Cohen's-h rare-event finding. |
 | **[16 — UI Build](16-ui-build.md)** | Before any frontend work. What is actually on screen, the CopilotKit v2 gotchas, and five bugs this build surfaced. Supersedes the speculative half of 11. |
+| **[17 — Rate-Limit Failure](17-rate-limit-failure.md)** | **Before doing anything else.** Why the live demo crashes, the token arithmetic behind it, and the ranked plan to fix it. Also: before adding anything to the prompt or tools. |
 | [website-instructions.md](website-instructions.md) | Any frontend/visual design work. Pre-existing, account-wide, not Finbot-specific. |
 
 ## The seven things that matter most
@@ -56,17 +57,18 @@ weekend text-to-SQL demo. It must survive being demoed to a boss or client.
    no fraud label at all**. Any fraud metric computed over all transactions is wrong by ~33%.
    This single fact drives the semantic layer, the sampling verdict, and the stats guardrails.
 
-4. **The agent is built, deployed and answering in production.** Next.js → CopilotKit → AG-UI → LangGraph →
-   Groq → DuckDB, end to end, with a system prompt, a YAML metric registry, governed views,
-   driver-level read-only, a structurally enforced query budget, inline charts, stats tools
+4. **The agent is built and deployed, and the demo crashes anyway — fix this first.**
+   Next.js → CopilotKit → AG-UI → LangGraph → Groq → DuckDB is complete and correct end to end:
+   a system prompt, a YAML metric registry, governed views, driver-level read-only, a
+   structurally enforced query budget, inline charts, stats tools
    (`compare_two_rates`/`rate_interval`/`compare_many_rates`, [15](15-statistics.md)) with
    `StatCard` UI wiring, and a visible SQL trace. Still single-agent, which the research
-   supports ([09](09-open-source-landscape.md)). **Deployment is finished.** Frontend:
-   https://finbot-ten.vercel.app (Vercel project `finbot`). Backend:
-   https://finbot-backend-yl6k.onrender.com (Render, free plan, from `render.yaml`). The
-   "Read-only preview" banner is gone and chat answers for real — verified end to end.
-   Free-plan caveat: the backend sleeps after ~15 min idle, so warm it before a demo.
-   Details: [03 §9](03-infrastructure-decision.md#9-current-deployment-status-as-of-2026-08-25).
+   supports ([09](09-open-source-landscape.md)). Frontend: https://finbot-ten.vercel.app
+   (Vercel project `finbot`). Backend: https://finbot-backend-yl6k.onrender.com (Render, free
+   plan, from `render.yaml`). Deploy details and traps: [03 §9](03-infrastructure-decision.md).
+   **But one question costs 8,491 tokens and Groq's free tier allows 8,000 per minute**, so
+   real use dies with a 413 mid-stream and the browser just hangs. Measured, with the ranked
+   fix: **[17](17-rate-limit-failure.md)**. Nothing else on the roadmap matters until this does.
 
 5. **Cohen's h is unusable on this data and would have produced a confidently wrong
    headline.** It scores the 53× online-vs-in-person fraud gap as "negligible", because the

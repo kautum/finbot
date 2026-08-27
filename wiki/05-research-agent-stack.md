@@ -135,10 +135,19 @@ three questions of rising difficulty (2–6 LLM calls, 1–5 SQL queries each).
 > `GROQ_MODEL` changes the ceiling. Groq also cut free daily request limits during 2026, so
 > treat these numbers as volatile and re-check them.
 
-**Behaviour on breach is a 429 rate-limit, not account disablement** — unlike the CockroachDB
-incident, Groq degrades rather than bans. But a silent 429 mid-answer looks broken to a
+**Behaviour on breach is a rate-limit, not account disablement** — unlike the CockroachDB
+incident, Groq degrades rather than bans. But a silent failure mid-answer looks broken to a
 watching boss. **Mitigations are mandatory**: exponential backoff, a user-visible "rate
 limited, retrying" state, and aggressive control of how much SQL result text re-enters context.
+
+> **⚠️ Corrected 2026-08-27 — this section predicted the failure and got one detail wrong, and
+> that detail is why the mitigation did not work.** An earlier version of this paragraph said
+> the breach arrives as a **429**. It does not. Groq returns **HTTP 413** with
+> `code: rate_limit_exceeded`, which surfaces as a bare `groq.APIStatusError` — *not* the
+> `groq.RateLimitError` that LangChain's backoff retries. So `max_retries=4` on `ChatGroq` was
+> set, looked like the mandated mitigation, and never fired once. Everything else here was
+> right: the per-minute cap did break the demo mid-answer, exactly as predicted. Full
+> measurement: **[17](17-rate-limit-failure.md)**.
 
 > The single cheapest TPM mitigation: don't feed 200 raw rows back into the model. Feed
 > aggregates and a truncated preview. This is a prompt/tool-design decision, not infrastructure.

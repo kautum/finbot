@@ -10,7 +10,14 @@ it is *under-built*. Almost everything below deepens the existing graph rather t
 
 ---
 
-## Status snapshot (updated 2026-08-25, verified against the working tree)
+## Status snapshot (updated 2026-08-27, verified against the working tree)
+
+> **Phases 0–9 are all built and deployed. The demo still does not work.** A single question
+> costs 8,491 tokens against Groq's free-tier ceiling of 8,000 per minute, so real use dies with
+> a 413 mid-stream. This is now the only thing that matters — read
+> **[17 — Rate-Limit Failure](17-rate-limit-failure.md)** and see
+> [What's left](#whats-left-in-priority-order-revised-2026-08-27) at the bottom of this page.
+> The phase bodies below are accurate history, not a to-do list.
 
 **Phases 0–6 are done and running locally.** `git log` shows three feature commits
 (`b0890c2`, `8e47475`, `8fed013`) that shipped the pre-joined DuckDB store, governed views,
@@ -18,11 +25,11 @@ driver-level read-only, the query budget, the semantic layer, charts, the SQL tr
 discovery UI. `agent/agent.py` has a real system prompt, two tools (`run_sql`, `chart`), and
 the budget-rebind guard — none of that existed when this roadmap was first written. Phase 8
 step 1 (checkpointer) is also done: `agent/server.py` builds an `AsyncSqliteSaver` correctly.
-Everything below this line is what is **actually still open**, in order.
 
-**Phases 0–6 bodies below are kept as historical record** — the safety patterns, view
-definitions and gotchas they document are still exactly what shipped. Skip to
-[Phase 7](#phase-7--statistics--ab-testing-built-not-wired) for the real remaining work.
+**All phase bodies below are kept as historical record** — the safety patterns, view
+definitions and gotchas they document are still exactly what shipped, and are worth reading
+before changing any of it. They are not a to-do list. Skip to
+[What's left](#whats-left-in-priority-order-revised-2026-08-27) for the real remaining work.
 
 ---
 
@@ -243,7 +250,7 @@ Phase 3 exists to enable.
 
 ---
 
-## PHASE 7 — Statistics / A/B testing (BUILT, NOT WIRED) — the next thing to build
+## PHASE 7 — Statistics / A/B testing — ✅ DONE (tools registered in `agent.py`, `StatCard.tsx` wired)
 
 **The math is done.** `agent/statistics.py` (27 KB) implements `compare_two_rates`,
 `rate_interval`, `compare_many_rates` — Wilson score intervals, pooled/unpooled z-tests,
@@ -297,11 +304,11 @@ server, and the correction survives.
 
 ---
 
-## PHASE 9 — Deploy (~1 day estimated; currently BLOCKED, in progress)
+## PHASE 9 — Deploy — ✅ DONE (both halves live; see [03 §9](03-infrastructure-decision.md))
 
 Two separate deployments, and both are open right now.
 
-### 9a. Frontend → Vercel — blocked on a platform permission wall
+### 9a. Frontend → Vercel — ✅ DONE (https://finbot-ten.vercel.app, project `finbot`)
 The connected Vercel token can create a brand-new project's first deployment, but 403s on
 any second touch to that same project — including projects created earlier in this same
 session (`finbot`, `finbot-analyst` both failed on redeploy). Every retry needs a **fresh,
@@ -317,7 +324,7 @@ Steps:
    (`snapshot: true` banner in `page.tsx`). This is a legitimate intermediate milestone, not
    the finished product.
 
-### 9b. Backend hosting — decision still owed by the owner ([03](03-infrastructure-decision.md) §8)
+### 9b. Backend hosting — ✅ DONE, Option A on Render (https://finbot-backend-yl6k.onrender.com)
 Nothing here has been built yet — no `Dockerfile`, no `render.yaml`. Once the owner picks:
 
 - **Option A (recommended)**: Render free web service, the 279 MB `data/finbot.duckdb`
@@ -397,28 +404,49 @@ Say these on a roadmap slide; do not build them.
   own logic (query-budget counting, tool rebinding) or the frontend. Reasonable for a demo at
   this size, but worth naming rather than leaving implicit.
 
-## What's left, in priority order (revised 2026-08-25b)
+## What's left, in priority order (revised 2026-08-27)
 
-1. **Wire Tavily back in** as a tool in `agent.py` (owner decision above), with an explicit
-   system-prompt boundary: use it only for context the database cannot supply, never for a
-   transaction/fraud number. Add it to the tools list AND to the post-budget rebind — the
-   rebind exists to stop runaway SQL loops, so it should still gate `run_sql`, not an
-   unrelated web lookup the model might still legitimately need to finish answering.
-2. **Finish Phase 7**: extend the system prompt to cover the stats tools + Tavily, then build
-   `StatCard.tsx` + its `useRenderTool` registration. Highest leverage per hour of anything
-   remaining — the 353× channel gap becomes a p-value-and-CI demo instead of two numbers.
-3. **Dependency + dead-code cleanup**: drop `pandas`, `psycopg2-binary`, `sqlalchemy`,
-   `sqlalchemy-cockroachdb` from `pyproject.toml`; remove `agent/test_neon.py`. Mechanical,
-   zero behavior change, unblocks Phase 9b's own stated memory budget.
-4. **Groq retry/backoff wrapper**, before Phase 9b — exponential backoff plus a visible
-   "rate limited, retrying" UI state, per the existing Phase 9 guidance.
-5. **Phase 9a — land one working Vercel deploy** under a fresh project name, to have a real
-   link to share (snapshot-backed, chat still offline).
-6. **Phase 9b — owner decides backend hosting**, then build the one artifact that decision
-   requires (Dockerfile for Option A, or the JS rewrite for Option B) and wire `AGENT_URL`.
-7. Everything else — mobile layout, a dedicated reasoning-trace panel (CopilotKit's built-in
-   "Thought for N seconds" already covers most of this for free), the `agent_memory` table —
-   is polish, not a blocker to a working public demo.
+**Items 1–6 of the previous list are all done** — Tavily wired, Phase 7 finished (`StatCard.tsx`
+shipped and registered), dead dependencies dropped, the Groq retry ceiling raised, and both
+halves deployed ([03 §9](03-infrastructure-decision.md)). The list below replaces it.
+
+**Everything here is blocked behind one thing: the demo crashes.** One question costs 8,491
+tokens; Groq's free tier allows 8,000/minute. Measured, with the full diagnosis and the fix:
+**[17 — Rate-Limit Failure](17-rate-limit-failure.md)**. Do not build features on top of a
+product that cannot answer twice in a row.
+
+0. **Test Cerebras first (~1 hour).** [05 §3](05-research-agent-stack.md) already found it:
+   **30,000 TPM and 1M tokens/day, no credit card** — ~4× Groq's ceiling, which clears the
+   current 8,491-token question with no prompt surgery at all. Unknown: whether it drives
+   Finbot's five tool schemas reliably. If yes, items 5 and 6 below become unnecessary. Do this
+   *before* trading away metric grounding to save tokens.
+1. **Take suggestions off the agent path** — `useConfigureSuggestions` currently resends the
+   whole system prompt and all five tool schemas to write three follow-ups. Saves 2,951
+   tokens/question and gets a single question under the ceiling by itself. One-line change,
+   biggest win available. [17 §10](17-rate-limit-failure.md).
+2. **Make the 413 survivable** — catch `APIStatusError`, branch on `status_code == 413`, honour
+   `x-ratelimit-reset-tokens`, emit a real `RUN_ERROR` instead of truncating the SSE stream.
+   Note that the existing `max_retries=4` does **not** cover this: LangChain retries 429, Groq
+   sends 413. The wrapper item 4 of the old list called "done" never protected the live path.
+3. **Fix the cold-start race** — set `maxDuration` explicitly on the copilotkit route (51.3s
+   cold start vs a 60s default ceiling), and give "backend waking up" its own UI state so it
+   stops being indistinguishable from a crash.
+4. **Turn on request logging** — `log_level="warning"` in `server.py` means production has no
+   access logs at all. The next failure will be invisible without this.
+5. **Cut the static prefix** (2,675 → 1,659 tokens/call) by moving `metrics.yaml` behind a
+   lookup tool and binding `tavily_search` only when needed. **Owner decision required** — it
+   trades always-on metric grounding, which [08](08-positioning.md) argues is the product, for
+   headroom. If done, the prompt must still list the metric *names*.
+6. **Pace requests against the token budget** — track `x-ratelimit-remaining-tokens` and wait
+   rather than fail. This is what makes it robust instead of merely less fragile.
+7. **Then** the housekeeping: merge `docs/wiki-and-research` to `main` (21 commits ahead, and
+   Render currently autodeploys from a docs branch), delete the duplicate Render service and
+   the stale `frontend` / `finbot-analyst` Vercel projects, revoke the tokens pasted in
+   plaintext, and finish items 6.1–6.2 (`load_to_neon.py`, the stale `DATABASE_URL`).
+8. **Only then** polish — mobile layout, a dedicated reasoning-trace panel (CopilotKit's
+   built-in "Thought for N seconds" already covers most of this for free), the `agent_memory`
+   table, and tests for `agent.py`'s own logic (query-budget counting, tool rebinding), which
+   remains untested.
 
 ## Realistic total (superseded — kept for history)
 
